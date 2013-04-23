@@ -128,6 +128,4 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
   os.chdir(current_dir)
   message = json.dumps(info, sort_keys=True, indent=2, separators=(',', ': '))
   req.content_type = 'application/json'
-  req.write(message + str(req.status))
-  return req.status
-
+  req.write(message)
