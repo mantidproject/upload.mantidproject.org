@@ -28,21 +28,19 @@ import sys
 import json
 import os
 
-def test(req, message=""):
-  req.content_type = 'text/plain'
-  req.write("My message: %s"%(message) + str(apache.OK))  
-  return apache.OK
+def publish_debug(req, author="", mail="", comment="", path="", file=""):
+  return publish(req, author=author, mail=mail, comment=comment, path=path, file=file, repo="sandbox"):
 
-def publish(req, author="", mail="", comment="", path="", file="", repo=""):
+
+def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
   info = dict()
   try:
     os.environ["GIT_COMMITTER_NAME"] = "mantidweb-uploader"
 
-    if repo == "upload.mantidproject.org":
-      REPOSITORYPATH = req.subprocess_env['SCRIPTREPOSITORYPATH']
-    else:
+    if repo == "sandbox":
       REPOSITORYPATH = req.subprocess_env['SANDBOXREPOSITORYPATH']
-
+    else:
+      REPOSITORYPATH = req.subprocess_env['SCRIPTREPOSITORYPATH']    
 
     #process author    
     if not author: raise RuntimeError("Invalid author: "+ author)
