@@ -28,12 +28,24 @@ import sys
 import json
 import os
 
-def publish_debug(req, author="", mail="", comment="", path="", file=""):
-  return publish(req, author=author, mail=mail, comment=comment, path=path, file=file, repo="sandbox"):
+class GitExceptions(Exception):
+  def __init__(self, value, cmd):
+    self.value = value
+    self.cmd = cmd
+  def __str__(self):
+    return repr(self.value)
 
+def __shell_execute(cmd ):
+   output = commands.getstatusoutput(cmd)
+   if (output[0]!=0):
+     raise GitExceptions(str(output[1]),cmd)
+
+def publish_debug(req, author="", mail="", comment="", path="", file=""):
+  return publish(req, author=author, mail=mail, comment=comment, path=path, file=file, repo="sandbox")
 
 def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
   info = dict()
+  current_dir = os.getcwd()
   try:
     os.environ["GIT_COMMITTER_NAME"] = "mantidweb-uploader"
 
@@ -70,9 +82,7 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
     fname = os.path.basename(fileitem.filename)
 
     # build absolute path to files directory  
-    dir_path = REPOSITORYPATH + folder 
-    if (dir_path[-1] != '/'):
-      dir_path += '/'
+    dir_path = os.path.join(REPOSITORYPATH,folder)
     file_path = os.path.join(dir_path,fname)
 
     try:
@@ -86,16 +96,18 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
       raise RuntimeError('Failed to create the file path : '+ file_path)
 
     # prepare the git command
-    relative_path = file_path.replace(REPOSITORYPATH,'')
-    shell_command = r"""cd %s && git add %s && git commit -m '%s' --author "%s" """%(REPOSITORYPATH, relative_path, comment, author + " <" + mail+">")
-    output = commands.getstatusoutput(shell_command)
-    if output[0] != 0:
-      info['detail'] = str(output[1])
-      raise RuntimeError("Failed to upload the file")
-    output = commands.getstatusoutput("cd %s; git pull --rebase && git push" %(REPOSITORYPATH))
-    if output[0] != 0:
-      info['detail'] = str(output[1])
-      raise RuntimeError("Failed to publish this file to the central repository")  
+    # change the current directory to REPOSITORYPATH
+    os.chdir(REPOSITORYPATH)
+    relative_path = os.path.relpath(file_path, REPOSITORYPATH)
+    
+    __shell_execute("git add " + relative_path)
+
+    __shell_execute("""git commit -m '%s' --author "%s" """%(comment, author + " <" + mail+">"))
+
+    __shell_execute("""git pull --rebase""")
+
+    __shell_execute("git push")
+
     info['message'] = 'success'
     req.status = apache.OK
   except RuntimeError, ex:
@@ -104,9 +116,16 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
   except KeyError, ex:
     info['message'] = """Internal Error: the repository path is not configured. Variable %s not found!""" %(str(ex))
     req.status = apache.HTTP_INTERNAL_SERVER_ERROR
+  except GitExceptions, ex:
+    info['shell'] = ex.cmd
+    info['detail'] = str(ex)
+    info['message'] = "Failed to Upload" # fixme
+    #recover the status
+    __shell_execute("git reset --hard origin/master")
   except :
     info['message'] = str(sys.exc_info())
     req.status = apache.HTTP_INTERNAL_SERVER_ERROR
+  os.chdir(current_dir)
   message = json.dumps(info, sort_keys=True, indent=2, separators=(',', ': '))
   req.content_type = 'application/json'
   req.write(message + str(req.status))
