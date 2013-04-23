@@ -47,7 +47,7 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
   info = dict()
   current_dir = os.getcwd()
   try:
-    os.environ["GIT_COMMITTER_NAME"] = "mantidweb-uploader"
+    os.environ["GIT_COMMITTER_NAME"] = "mantid-publisher"
 
     if repo == "sandbox":
       REPOSITORYPATH = req.subprocess_env['SANDBOXREPOSITORYPATH']
