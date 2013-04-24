@@ -27,6 +27,7 @@ import commands
 import sys
 import json
 import os
+import time
 
 class GitExceptions(Exception):
   def __init__(self, value, cmd):
@@ -107,7 +108,10 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
     __shell_execute("""git pull --rebase""")
 
     __shell_execute("git push")
-
+    timeformat="%Y-%b-%d %H:%M:%S"
+    stat = os.stat(relative_path)
+    pub_date = time.strftime(timeformat,time.gmtime(int(stat.st_mtime + 120)))#add 2minutes
+    info['pub_date'] = pub_date
     info['message'] = 'success'
     req.status = apache.OK
   except RuntimeError, ex:
