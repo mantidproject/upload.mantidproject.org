@@ -100,7 +100,7 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
     os.chdir(REPOSITORYPATH)
     relative_path = os.path.relpath(file_path, REPOSITORYPATH)
     
-    __shell_execute("git add " + relative_path)
+    __shell_execute("""git add "%s" """ %(relative_path))
 
     __shell_execute("""git commit -m '%s' --author "%s" """%(comment, author + " <" + mail+">"))
 
@@ -119,7 +119,11 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
   except GitExceptions, ex:
     info['shell'] = ex.cmd
     info['detail'] = str(ex)
-    info['message'] = "Failed to Upload" # fixme
+    if ('nothing added to commit' in str(ex) or
+       'nothing to commit' in str(ex)):
+      info['message'] = "success"
+    else:
+      info['message'] = "Failed to Upload.\n You may turn on the information level of logging and try again to see why it failed." 
     #recover the status
     __shell_execute("git reset --hard origin/master")
   except :
