@@ -72,6 +72,11 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
       raise RuntimeError("Warning we do not allow ../ at the folder definition. And it must always begin with ./")
 
     fileitem = file
+    
+    #check that file is not bigger than 1MB
+    if len(fileitem.value)>1048576:
+        raise RuntimeError("""Files larger than 1MB cannot be published through this interface. This is to prevent the repository from growing too fast. If you require this file to be published please contact the development team at mantid-help@mantidproject.org""")
+
     try: # Windows needs stdio set for binary mode.
       import msvcrt
       msvcrt.setmode (0, os.O_BINARY) # stdin  = 0
