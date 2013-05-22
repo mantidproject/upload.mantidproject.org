@@ -40,6 +40,7 @@ def __shell_execute(cmd ):
    output = commands.getstatusoutput(cmd)
    if (output[0]!=0):
      raise GitExceptions(str(output[1]),cmd)
+   return output[1]
 
 def publish_debug(req, author="", mail="", comment="", path="", file=""):
   return publish(req, author=author, mail=mail, comment=comment, path=path, file=file, repo="sandbox")
@@ -105,7 +106,7 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
     # change the current directory to REPOSITORYPATH
     os.chdir(REPOSITORYPATH)
     relative_path = os.path.relpath(file_path, REPOSITORYPATH)
-    
+
     __shell_execute("""git add "%s" """ %(relative_path))
 
     __shell_execute("""git commit -m '%s' --author "%s" """%(comment, author + " <" + mail+">"))
@@ -133,6 +134,90 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
       info['message'] = "success"
     else:
       info['message'] = "Failed to Upload.\n You may turn on the information level of logging and try again to see why it failed." 
+    #recover the status
+    __shell_execute("git reset --hard origin/master")
+  except :
+    info['message'] = str(sys.exc_info())
+    req.status = apache.HTTP_INTERNAL_SERVER_ERROR
+  os.chdir(current_dir)
+  message = json.dumps(info, sort_keys=True, indent=2, separators=(',', ': '))
+  req.content_type = 'application/json'
+  req.write(message)
+
+
+def remove_debug(req, author="", mail="", comment="", path="", file_n=""):
+  return remove(req, author=author, mail=mail, comment=comment, path=path, file_n=file_n, repo="sandbox")
+
+def remove(req, author="", mail="", comment="", path="", file_n="", repo = ""):
+  info = dict()
+  current_dir = os.getcwd()
+  try:
+    os.environ["GIT_COMMITTER_NAME"] = "mantid-publisher"
+
+    if repo == "sandbox":
+      REPOSITORYPATH = req.subprocess_env['SANDBOXREPOSITORYPATH']
+    else:
+      REPOSITORYPATH = req.subprocess_env['SCRIPTREPOSITORYPATH']    
+
+    #process author    
+    if not author: raise RuntimeError("Invalid author: "+ author)
+    
+    #process email
+    if not re.match(r'[^@]+@[^@]+\.[^@]+',mail): raise RuntimeError("Invalid email: "+mail)
+    
+    #process comment
+    if not comment: raise RuntimeError("Invalid comment: " + comment)
+
+    # strip leading path from file name to avoid directory traversal attacks   
+
+    # check file_path exits
+    file_path = os.path.join(REPOSITORYPATH,file_n)
+
+    try:
+      if not os.path.exists(file_path):
+          raise apache.SERVER_RETURN, apache.HTTP_UNAUTHORIZED
+      if os.path.isdir(file_path):
+          raise apache.SERVER_RETURN, apache.HTTP_UNAUTHORIZED      
+    except: # failed to create the file
+      raise RuntimeError('The file ' + file_path + ' is not a valid entry to be removed. Is is a directory?')
+
+    # prepare the git command
+    # change the current directory to REPOSITORYPATH
+    os.chdir(REPOSITORYPATH)
+    relative_path = os.path.relpath(file_path, REPOSITORYPATH)
+
+    # before anything, query the author
+    last_commit_info = __shell_execute("""git log -1 %s""" %(relative_path))
+
+    re_default_author = re.compile('Author: (?P<author>.+) <(?P<email>.+)>')
+    def_m = re.search(re_default_author,last_commit_info)
+    if not def_m:
+      raise RuntimeError("Internal Error, could not find the owner of this file")
+    
+    last_author = def_m.group('author')
+    last_email = def_m.group('email')
+    if last_author != author or last_email != mail:
+      raise RuntimeError("You are not allowed to delete this file because it belongs to another user")
+    
+    __shell_execute("""git rm "%s" """ %(relative_path))
+
+    __shell_execute("""git commit -m '%s' --author "%s" """%(comment, author + " <" + mail+">"))
+
+    __shell_execute("""git pull --rebase""")
+
+    __shell_execute("git push")
+
+    info['message'] = 'success'
+    req.status = apache.OK
+  except RuntimeError, ex:
+    info['message'] = str(ex)
+    req.status = apache.HTTP_BAD_REQUEST
+  except KeyError, ex:
+    info['message'] = """Internal Error: the repository path is not configured. Variable %s not found!""" %(str(ex))
+    req.status = apache.HTTP_INTERNAL_SERVER_ERROR
+  except GitExceptions, ex:
+    info['shell'] = ex.cmd
+    info['detail'] = str(ex)
     #recover the status
     __shell_execute("git reset --hard origin/master")
   except :
