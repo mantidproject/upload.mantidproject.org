@@ -174,9 +174,9 @@ def remove(req, author="", mail="", comment="", path="", file_n="", repo = ""):
     file_path = os.path.join(REPOSITORYPATH,file_n)
 
     if not os.path.exists(file_path):
-      raise RuntimeError("The file : " + str(file_path) + " does not exist insi
+      raise RuntimeError("The file : " + str(file_path) + " does not exist inside the repository")
     if os.path.isdir(file_path):
-      raise RuntimeError('The file ' + file_path + ' is not a valid entry to be
+      raise RuntimeError('The file ' + str(file_path) + ' is not a valid entry to be removed')
 
     # prepare the git command
     # change the current directory to REPOSITORYPATH
