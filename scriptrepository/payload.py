@@ -173,13 +173,10 @@ def remove(req, author="", mail="", comment="", path="", file_n="", repo = ""):
     # check file_path exits
     file_path = os.path.join(REPOSITORYPATH,file_n)
 
-    try:
-      if not os.path.exists(file_path):
-          raise apache.SERVER_RETURN, apache.HTTP_UNAUTHORIZED
-      if os.path.isdir(file_path):
-          raise apache.SERVER_RETURN, apache.HTTP_UNAUTHORIZED      
-    except: # failed to create the file
-      raise RuntimeError('The file ' + file_path + ' is not a valid entry to be removed. Is is a directory?')
+    if not os.path.exists(file_path):
+      raise RuntimeError("The file : " + str(file_path) + " does not exist insi
+    if os.path.isdir(file_path):
+      raise RuntimeError('The file ' + file_path + ' is not a valid entry to be
 
     # prepare the git command
     # change the current directory to REPOSITORYPATH
@@ -187,7 +184,7 @@ def remove(req, author="", mail="", comment="", path="", file_n="", repo = ""):
     relative_path = os.path.relpath(file_path, REPOSITORYPATH)
 
     # before anything, query the author
-    last_commit_info = __shell_execute("""git log -1 %s""" %(relative_path))
+    last_commit_info = __shell_execute("""git log -1 "%s" """ %(relative_path))
 
     re_default_author = re.compile('Author: (?P<author>.+) <(?P<email>.+)>')
     def_m = re.search(re_default_author,last_commit_info)
