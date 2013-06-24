@@ -108,8 +108,10 @@ def publish(req, author="", mail="", comment="", path="", file="", repo = ""):
     relative_path = os.path.relpath(file_path, REPOSITORYPATH)
 
     __shell_execute("""git add "%s" """ %(relative_path))
-
-    __shell_execute("""git commit -m '%s' --author "%s" """%(comment, author + " <" + mail+">"))
+    comment.replace('"',"''")
+    author.replace('"',"''")
+    mail.replace('"',"''")
+    __shell_execute("""git commit -m "%s" --author "%s" """%(comment, author + " <" + mail+">"))
 
     __shell_execute("""git pull --rebase""")
 
@@ -197,8 +199,10 @@ def remove(req, author="", mail="", comment="", path="", file_n="", repo = ""):
       raise RuntimeError("You are not allowed to delete this file because it belongs to another user")
     
     __shell_execute("""git rm "%s" """ %(relative_path))
-
-    __shell_execute("""git commit -m '%s' --author "%s" """%(comment, author + " <" + mail+">"))
+    comment.replace('"',"''")
+    author.replace('"',"''")
+    mail.replace('"',"''")
+    __shell_execute("""git commit -m "%s" --author "%s" """%(comment, author + " <" + mail+">"))
 
     __shell_execute("""git pull --rebase""")
 
