@@ -1,7 +1,27 @@
 """Defines the WSGI application entry point for the upload server
 
+In order to submit a file, it is necessary to POST a form with the
+following fields:
+  - author: Name of the author of the file.
+  - email: Email of the author.
+  - comment: a description of the file or updates it is being done.
+  - file: The file itself.
+  - path: The folder where the file must be inserted.
+
+If the values are all valid then the files are committed and uploaded
+to the central repository using:
+  - git add <file>
+  - git commit -m "<comment>" --author "<author> <<email>>"
+  - git push
+
+The response body will be a json-encoded dictionary containing:
+  - message: one of two strings ['success', 'failure] depending on the outcome
+  - detail: if an error occurred then further details are provided here
+  - pub_date: the date and time of the upload in the format  %Y-%b-%d %H:%M:%S
+  - shell: The commands that were run by the server
+
 The server understands a single query parameter 'debug=1' and when set the
-upload will got the sandbox testing repository
+upload will go to the sandbox testing repository.
 """
 import cgi
 import os
