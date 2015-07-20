@@ -88,8 +88,13 @@ def update_central_repo(environ, script_form):
     """This assumes that the script is running as a user who has permissions
     to push to the central github repository
     """
-    pass
-    #git_repo = GitRepository(environ["SCRIPT_REPOSITORY_PATH"])
+    try:
+        script_repo_path = environ["SCRIPT_REPOSITORY_PATH"]
+    except KeyError:
+        environ["wsgi.errors"].write("Invalid server configuration: SCRIPT_REPOSITORY_PATH environment variable not defined.\n")
+        return Response(httplib.SREVER_ERROR, message="Server Error. Please contact Mantid support.")
+
+    git_repo = GitRepository(script_repo_path)
 
 # ------------------------------------------------------------------------------
 # Helpers

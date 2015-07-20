@@ -4,6 +4,7 @@ import os
 import sys
 import unittest
 from urllib import urlencode
+import urllib2
 from wsgi_intercept import httplib2_intercept, add_wsgi_intercept
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "application"))
@@ -65,10 +66,28 @@ class ScriptUploadServerTest(unittest.TestCase):
             'content-type': 'application/json; charset=utf-8'
         }
         self.check_response(expected=expected_resp, actual=resp)
-        self.check_replied_content(expected=dict(message='Incomplete form information supplied.',
-                                                 detail='Missing fields: file\nInvalid fields: author,mail,comment,path',
-                                                 pub_date='', shell=''),
+        expected_content = dict(message='Incomplete form information supplied.',
+                                detail='Missing fields: file\nInvalid fields: author,mail,comment,path',
+                                pub_date='', shell='')
+        self.check_replied_content(expected=expected_content,
                                    actual=content)
+
+    # def xtest_server_without_correct_environment_returns_500_error(self):
+    #     http = httplib2.Http()
+    #     data = dict(author='Joe Bloggs', mail='first.last@domain.com',
+    #                 comment='Test comment', path='muon', file=)
+
+    #     resp, content = http.request(uri=URL, method='POST', body=urlencode(data))
+    #     expected_resp = {
+    #         'status': '500',
+    #         'content-length': '157',
+    #         'content-type': 'application/json; charset=utf-8'
+    #     }
+    #     self.check_response(expected=expected_resp, actual=resp)
+    #     expected_content = dict(message='Incomplete form information supplied.',
+    #                             detail='', pub_date='', shell='')
+    #     self.check_replied_content(expected=expected_content,
+    #                                actual=content)
 
     # -------------------------------------------------------------------------------------------
     # Helpers
