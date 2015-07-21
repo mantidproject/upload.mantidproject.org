@@ -33,6 +33,7 @@ import httplib
 import os
 
 from .base import ScriptUploadForm, ServerResponse
+from .repository import GitCommitInfo, GitRepository
 
 # Map requests to handlers
 # Each handler should have the following structure:
@@ -99,6 +100,9 @@ def update_central_repo(environ, script_form):
         return ServerResponse(httplib.BAD_REQUEST, message="File is too large.",
                               detail="Maximum filesize is {0} bytes".format(MAX_FILESIZE_BYTES))
 
+    git_repo = GitRepository(script_repo_path)
+    return push_to_repository(script_form, git_repo)
 
 
+def push_to_repository(script_form, git_repo):
     return ServerResponse(httplib.OK, message="success")
