@@ -45,6 +45,9 @@ _REQUEST_HANDLERS = {
     'POST': 'handle_post'
 }
 
+# Maximum allowed file size
+MAX_FILESIZE_BYTES=1*1024*1024
+
 # -----------------------------------------------------------------------------
 # Entry point
 # -----------------------------------------------------------------------------
@@ -91,14 +94,11 @@ def update_central_repo(environ, script_form):
         environ["wsgi.errors"].write("Invalid server configuration: SCRIPT_REPOSITORY_PATH environment variable not defined.\n")
         return ServerResponse(httplib.INTERNAL_SERVER_ERROR, message="Server Error. Please contact Mantid support.")
 
+    # size limit
+    if script_form.filesize > MAX_FILESIZE_BYTES:
+        return ServerResponse(httplib.BAD_REQUEST, message="File is too large.",
+                              detail="Maximum filesize is {0} bytes".format(MAX_FILESIZE_BYTES))
+
+
+
     return ServerResponse(httplib.OK, message="success")
-
-
-class GitRepository(object):
-     """Models a git repo. Currently it needs to have been cloned first.
-     """
-     def __init__(self, path):
-         if not os.path.exists(path):
-             raise ValueError("Unable to find git repository at '{0}'. "\
-                              "It must be have been cloned first.".format(path))
-         self.root = path

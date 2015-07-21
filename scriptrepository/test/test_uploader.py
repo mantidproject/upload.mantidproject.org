@@ -97,6 +97,29 @@ class ScriptUploadServerTest(unittest.TestCase):
         self.check_replied_content(expected=expected_content,
                                    actual=response.body)
 
+    def test_script_over_max_size_returns_400_error(self):
+        extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
+        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
+        # Write a "big" file
+        big_script = tempfile.NamedTemporaryFile(delete=False)
+        limit = 1024*1024
+        for i in range(limit + 1):
+            big_script.write("1")
+        big_script.close()
+
+        response = TEST_APP.post('/', extra_environ=extra_environ, expect_errors=True,
+                                 params=data, upload_files=[("file", big_script.name)])
+        os.remove(big_script.name)
+        expected_resp = {
+            'status': '400 Bad Request',
+            'content-length': 109,
+            'content-type': 'application/json'
+        }
+        self.check_response(expected=expected_resp, actual=response)
+        self.check_replied_content(expected=dict(message='File is too large.', detail='Maximum filesize is 1048576 bytes',
+                                                 pub_date='', shell=''), actual=response.body)
+
+
     def test_server_without_correct_environment_returns_500_error(self):
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
         response = TEST_APP.post('/', data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)],

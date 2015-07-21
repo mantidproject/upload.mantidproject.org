@@ -35,6 +35,9 @@ class ScriptUploadForm(object):
                 missing.append(name)
         #endfor
         if len(missing) == 0 and len(invalid) == 0:
+            # Use the filtiem not the actual content
+            del data["file"]
+            data["fileitem"] = request_fields[name]
             return ScriptUploadForm(**data), None
         else:
             summary = 'Incomplete form information supplied.'
@@ -54,12 +57,35 @@ class ScriptUploadForm(object):
         else:
             return (value != '')
 
-    def __init__(self, author, mail, comment, path, file):
+    def __init__(self, author, mail, comment, path, fileitem):
         self.author = author
         self.mail = mail
         self.comment = comment
-        self.path = path
-        self.file = file
+        self.rel_path = path
+        self.fileitem = fileitem
+
+    def filepath(self, root):
+        # strip leading path from filename to avoid directory traversal attacks
+        filename = os.path.basename(self.fileitem.filename)
+        return os.path.join(root, path, filename)
+
+    @property
+    def filesize(self):
+        return len(self.fileitem.value)
+
+    def write_script_to_disk(self, root):
+        """Dumps the uploaded file contents to disk. The location is
+        formed by os.path.join(root, self.rel_path), where rel_path is
+        the path specified by the form
+        """
+        filepath = self.filepath(root)
+        if os.path.isdir(filepath):
+            return ("Cannot replace directory with a file.","{0} already exists as a directory.".format(filepath))
+        try:
+            open(filepath, 'wb').write(self.fileitem.read())
+        except Exception, err:
+            return ("Unable to write script to disk.", str(err))
+
 
 # ------------------------------------------------------------------------------
 
