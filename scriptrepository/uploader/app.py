@@ -19,7 +19,6 @@ The response body will be a json-encoded dictionary containing:
              success it is simply 'success'
   - detail: if an error occurred then further details are provided here
   - pub_date: the date and time of the upload in the format  %Y-%b-%d %H:%M:%S
-  - shell: The commands that were run by the server
 
 Only POST requests are accepted, any other type will result in a 405 error.
 
@@ -31,6 +30,7 @@ from __future__ import absolute_import, print_function
 
 import httplib
 import os
+import time
 
 from .base import ScriptUploadForm, ServerResponse
 from .repository import GitCommitInfo, GitRepository
@@ -48,6 +48,9 @@ _REQUEST_HANDLERS = {
 
 # Maximum allowed file size
 MAX_FILESIZE_BYTES=1*1024*1024
+
+# Comitter's name
+GIT_COMMITTER_NAME = "mantid-publisher"
 
 # -----------------------------------------------------------------------------
 # Entry point
@@ -105,4 +108,28 @@ def update_central_repo(environ, script_form):
 
 
 def push_to_repository(script_form, git_repo):
-    return ServerResponse(httplib.OK, message="success")
+    filepath, error = script_form.write_script_to_disk(git_repo.root)
+    if error:
+        return ServerResponse(httplib.INTERNAL_SERVER_ERROR, message=error[0],
+                              detail="\n".join(error[1:]))
+
+    commit_info = GitCommitInfo(author=script_form.author,
+                                email=script_form.mail,
+                                filelist=[filepath],
+                                committer=GIT_COMMITTER_NAME)
+    error = git_repo.commit_and_push(commit_info)
+    if error:
+        return ServerResponse(httplib.INTERNAL_SERVER_ERROR,
+                              message=error[0],
+                              detail="\n".join(error[1:]))
+    else:
+        return ServerResponse(httplib.OK, message="success",
+                              published_date=published_date(filepath))
+
+def published_date(filepath):
+    timeformat = "%Y-%b-%d %H:%M:%S"
+    stat = os.stat(filepath)
+    modified_time = int(stat.st_mtime)
+    # The original code added 2 minutes to the modification date of the file
+    # so we preserve this behaviour here
+    return time.strftime(timeformat, time.gmtime(modified_time + 120))

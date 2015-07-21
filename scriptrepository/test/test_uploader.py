@@ -1,3 +1,4 @@
+import datetime
 import httplib2
 import json
 import os
@@ -5,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from urllib import urlencode
 from webtest import TestApp
@@ -49,12 +51,13 @@ class ScriptUploadServerTest(unittest.TestCase):
                                  params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)])
         expected_resp = {
             'status': '200 OK',
-            'content-length': 65,
+            'content-length': 85,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected=dict(message='success', detail='',
-                                                 pub_date='', shell=''), actual=response.body)
+        self.check_replied_content(expected_json=dict(message='success', detail='',
+                                                      pub_date=self._now_as_str(), shell=''),
+                                   actual_str=response.body)
 
     # ---------------- Failure cases ---------------------
 
@@ -66,8 +69,8 @@ class ScriptUploadServerTest(unittest.TestCase):
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected=dict(message='Endpoint is ready to accept form uploads.', detail='',
-                                                 pub_date='', shell=''), actual=response.body)
+        self.check_replied_content(expected_json=dict(message='Endpoint is ready to accept form uploads.', detail='',
+                                                      pub_date='', shell=''), actual_str=response.body)
 
     def test_POST_of_form_without_all_information_produces_400_error(self):
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
@@ -78,9 +81,9 @@ class ScriptUploadServerTest(unittest.TestCase):
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected=dict(message='Incomplete form information supplied.',
-                                                 detail='Missing fields: file', pub_date='', shell=''),
-                                   actual=response.body)
+        self.check_replied_content(expected_json=dict(message='Incomplete form information supplied.',
+                                                      detail='Missing fields: file', pub_date='', shell=''),
+                                   actual_str=response.body)
 
     def test_POST_of_form_with_invalid_fields_produces_400_error(self):
         data = dict(author='', mail='joe.bloggs', comment='', path='')
@@ -94,8 +97,8 @@ class ScriptUploadServerTest(unittest.TestCase):
         expected_content = dict(message='Incomplete form information supplied.',
                                 detail='Missing fields: file\nInvalid fields: author,mail,comment,path',
                                 pub_date='', shell='')
-        self.check_replied_content(expected=expected_content,
-                                   actual=response.body)
+        self.check_replied_content(expected_json=expected_content,
+                                   actual_str=response.body)
 
     def test_script_over_max_size_returns_400_error(self):
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
@@ -116,8 +119,8 @@ class ScriptUploadServerTest(unittest.TestCase):
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected=dict(message='File is too large.', detail='Maximum filesize is 1048576 bytes',
-                                                 pub_date='', shell=''), actual=response.body)
+        self.check_replied_content(expected_json=dict(message='File is too large.', detail='Maximum filesize is 1048576 bytes',
+                                                      pub_date='', shell=''), actual_str=response.body)
 
 
     def test_server_without_correct_environment_returns_500_error(self):
@@ -130,8 +133,8 @@ class ScriptUploadServerTest(unittest.TestCase):
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected=dict(message='Server Error. Please contact Mantid support.', detail='',
-                                                 pub_date='', shell=''), actual=response.body)
+        self.check_replied_content(expected_json=dict(message='Server Error. Please contact Mantid support.', detail='',
+                                                      pub_date='', shell=''), actual_str=response.body)
 
     # -------------------------------------------------------------------------------------------
     # Helpers
@@ -142,9 +145,31 @@ class ScriptUploadServerTest(unittest.TestCase):
         self.assertEquals(expected['content-type'], actual.content_type)
         self.assertEquals(expected['content-length'], actual.content_length)
 
-    def check_replied_content(self, expected, actual):
-        self.assertEquals(json.dumps(expected), actual)
+    def check_replied_content(self, expected_json, actual_str):
+        actual_json = json.loads(actual_str)
+        # Check the published date manually
+        actual_pub_date = actual_json["pub_date"]
+        del actual_json["pub_date"]
+        expected_pub_date = expected_json["pub_date"]
+        del expected_json["pub_date"]
 
+        self.assertEquals(expected_json, actual_json)
+        # The pub_date is simply checked that the date portion agrees
+        if (expected_pub_date != actual_pub_date) and (expected_pub_date != ''):
+            # create full datetime objects from both
+            expected_date = datetime.datetime.strptime(expected_pub_date, "%Y-%b-%d %H:%M:%S")
+            try:
+                actual_date = datetime.datetime.strptime(actual_pub_date, "%Y-%b-%d %H:%M:%S")
+            except ValueError:
+                self.fail("response pub_date '{0}' cannot be parsed as a datetime object".format(actual_pub_date))
+            # Just check the dates
+            self.assertEquals(self._date_as_str(expected_date.date()), self._date_as_str(actual_date))
+
+    def _now_as_str(self):
+        return datetime.date.today().strftime("%Y-%b-%d %H:%M:%S")
+
+    def _date_as_str(self, date):
+        return date.strftime("%Y-%b-%d")
 
 # ------------------------------------------------------------------------------
 

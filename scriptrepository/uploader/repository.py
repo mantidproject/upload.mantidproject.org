@@ -23,7 +23,14 @@ class GitRepository(object):
         if not os.path.exists(path):
             raise ValueError("Unable to find git repository at '{0}'. "\
                              "It must be have been cloned first.".format(path))
-            self.root = path
+        self.root = path
+
+    def commit_and_push(self, commit):
+        error = self.commit(commit)
+        if error is None:
+            return self.push()
+        else:
+            return error
 
     def commit(self, commit):
         """Commits all of the changes detailed by the CommitInfo object"""
@@ -43,6 +50,6 @@ class GitCommitInfo(object):
 
     def __init__(self, author, email, filelist, committer=None):
         self.author = author
-        self.committer = comitter if comitter is not None else author
+        self.committer = committer if committer is not None else author
         self.email = email
         self.filelist = filelist

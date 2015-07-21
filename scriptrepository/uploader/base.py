@@ -5,6 +5,7 @@ from __future__ import absolute_import, print_function
 import cgi
 import httplib
 import json
+import os
 import re
 
 # Email regex
@@ -67,7 +68,7 @@ class ScriptUploadForm(object):
     def filepath(self, root):
         # strip leading path from filename to avoid directory traversal attacks
         filename = os.path.basename(self.fileitem.filename)
-        return os.path.join(root, path, filename)
+        return os.path.join(root, self.rel_path, filename)
 
     @property
     def filesize(self):
@@ -80,12 +81,15 @@ class ScriptUploadForm(object):
         """
         filepath = self.filepath(root)
         if os.path.isdir(filepath):
-            return ("Cannot replace directory with a file.","{0} already exists as a directory.".format(filepath))
+            return None, ("Cannot replace directory with a file.","{0} already exists as a directory.".format(filepath))
         try:
-            open(filepath, 'wb').write(self.fileitem.read())
+            # Make sure the directory exists
+            os.makedirs(os.path.dirname(filepath))
+            open(filepath, 'wb').write(self.fileitem.file.read())
         except Exception, err:
-            return ("Unable to write script to disk.", str(err))
+            return None, ("Unable to write script to disk.", str(err))
 
+        return filepath, None
 
 # ------------------------------------------------------------------------------
 
