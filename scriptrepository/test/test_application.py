@@ -1,34 +1,65 @@
 import httplib2
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 from urllib import urlencode
 from webtest import TestApp
 
 # Our application
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "application"))
-from server import application
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from application.server import application
 
-# Local server URL
-HOST = 'localhost'
-PORT = 80
-URL = 'http://{0}:{1}/'.format(HOST, PORT)
+# Local server
 TEST_APP = None
+# Temporary git repository path
+TEMP_GIT_REPO_PATH = os.path.join(tempfile.gettempdir(), "scriptrepository_unittest")
+
+SCRIPT_CONTENT = \
+"""
+def hello(name):
+    print "Hello, World"
+"""
 
 # ------------------------------------------------------------------------------
 def setUpModule():
     global TEST_APP
     TEST_APP = TestApp(application)
+    os.mkdir(TEMP_GIT_REPO_PATH)
+    start_dir = os.getcwd()
+    os.chdir(TEMP_GIT_REPO_PATH)
+    subprocess.check_output("git init", stderr=subprocess.STDOUT, shell=True)
+    os.chdir(start_dir)
+
+def tearDownModule():
+    shutil.rmtree(TEMP_GIT_REPO_PATH)
 
 # ------------------------------------------------------------------------------
 
 class ScriptUploadServerTest(unittest.TestCase):
 
+    # ---------------- Success cases ---------------------
+    def test_app_returns_200_for_successful_upload(self):
+        extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
+        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
+        response = TEST_APP.post('/', extra_environ=extra_environ,
+                                 params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)])
+        expected_resp = {
+            'status': '200 OK',
+            'content-length': 65,
+            'content-type': 'application/json'
+        }
+        self.check_response(expected=expected_resp, actual=response)
+        self.check_replied_content(expected=dict(message='success', detail='',
+                                                 pub_date='', shell=''), actual=response.body)
+
     # ---------------- Failure cases ---------------------
 
     def test_app_returns_405_for_non_POST_requests(self):
-        response = TEST_APP.get('/', status=405)
+        response = TEST_APP.get('/', expect_errors=True)
         expected_resp = {
             'status': '405 Method Not Allowed',
             'content-length': 99,
@@ -39,9 +70,8 @@ class ScriptUploadServerTest(unittest.TestCase):
                                                  pub_date='', shell=''), actual=response.body)
 
     def test_POST_of_form_without_all_information_produces_400_error(self):
-        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='muon')
-        response = TEST_APP.post('/', data,
-                                 status=400)
+        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
+        response = TEST_APP.post('/', data, expect_errors=True)
         expected_resp = {
             'status': '400 Bad Request',
             'content-length': 115,
@@ -53,9 +83,8 @@ class ScriptUploadServerTest(unittest.TestCase):
                                    actual=response.body)
 
     def test_POST_of_form_with_invalid_fields_produces_400_error(self):
-        data = dict(author='', mail='', comment='', path='')
-        response = TEST_APP.post('/', data,
-                                 status=400)
+        data = dict(author='', mail='joe.bloggs', comment='', path='')
+        response = TEST_APP.post('/', data, expect_errors=True)
         expected_resp = {
             'status': '400 Bad Request',
             'content-length': 157,
@@ -68,22 +97,18 @@ class ScriptUploadServerTest(unittest.TestCase):
         self.check_replied_content(expected=expected_content,
                                    actual=response.body)
 
-    # def xtest_server_without_correct_environment_returns_500_error(self):
-    #     http = httplib2.Http()
-    #     data = dict(author='Joe Bloggs', mail='first.last@domain.com',
-    #                 comment='Test comment', path='muon', file=)
-
-    #     resp, content = http.request(uri=URL, method='POST', body=urlencode(data))
-    #     expected_resp = {
-    #         'status': '500',
-    #         'content-length': '157',
-    #         'content-type': 'application/json; charset=utf-8'
-    #     }
-    #     self.check_response(expected=expected_resp, actual=resp)
-    #     expected_content = dict(message='Incomplete form information supplied.',
-    #                             detail='', pub_date='', shell='')
-    #     self.check_replied_content(expected=expected_content,
-    #                                actual=content)
+    def test_server_without_correct_environment_returns_500_error(self):
+        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
+        response = TEST_APP.post('/', data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)],
+                                 expect_errors=True)
+        expected_resp = {
+            'status': '500 Internal Server Error',
+            'content-length': 102,
+            'content-type': 'application/json'
+        }
+        self.check_response(expected=expected_resp, actual=response)
+        self.check_replied_content(expected=dict(message='Server Error. Please contact Mantid support.', detail='',
+                                                 pub_date='', shell=''), actual=response.body)
 
     # -------------------------------------------------------------------------------------------
     # Helpers

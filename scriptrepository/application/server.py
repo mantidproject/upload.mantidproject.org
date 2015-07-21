@@ -27,10 +27,12 @@ Several query parameters are understood:
  - remove=1: if included the file will be removed rather than uploaded
  - debug=1: if included then the update will happen in the sandbox repository
 """
-import cgi
+from __future__ import absolute_import, print_function
+
 import httplib
-import json
 import os
+
+from .base import ScriptUploadForm, ServerResponse
 
 # Map requests to handlers
 # Each handler should have the following structure:
@@ -38,7 +40,7 @@ import os
 #      # process the request
 #      ...
 #      ...
-#      return Response(status_code, ...)
+#      return ServerResponse(status_code, ...)
 _REQUEST_HANDLERS = {
     'POST': 'handle_post'
 }
@@ -68,18 +70,13 @@ def application(environ, start_response):
 def handle_post(environ):
     script_form, error = ScriptUploadForm.create(environ)
     if error is not None:
-        return Response(httplib.BAD_REQUEST, message=error[0], detail='\n'.join(error[1:]))
+        return ServerResponse(httplib.BAD_REQUEST, message=error[0], detail='\n'.join(error[1:]))
 
     # Process payload
-    resp_body, error = update_central_repo(environ, script_form)
-    # Response
-    status = create_status_response(httplib.OK) if error is None else create_status_response(httplib.BAD_REQUEST)
-    response_body = create_response_body('success', '')
-    response_headers = create_response_headers(len(response_body))
-    return status, response_headers, response_body
+    return update_central_repo(environ, script_form)
 
 def null_handler(environ):
-    return Response(httplib.METHOD_NOT_ALLOWED, message=u'Endpoint is ready to accept form uploads.')
+    return ServerResponse(httplib.METHOD_NOT_ALLOWED, message=u'Endpoint is ready to accept form uploads.')
 
 # ------------------------------------------------------------------------------
 # Repository update
@@ -92,77 +89,10 @@ def update_central_repo(environ, script_form):
         script_repo_path = environ["SCRIPT_REPOSITORY_PATH"]
     except KeyError:
         environ["wsgi.errors"].write("Invalid server configuration: SCRIPT_REPOSITORY_PATH environment variable not defined.\n")
-        return Response(httplib.SREVER_ERROR, message="Server Error. Please contact Mantid support.")
+        return ServerResponse(httplib.INTERNAL_SERVER_ERROR, message="Server Error. Please contact Mantid support.")
 
-    git_repo = GitRepository(script_repo_path)
+    return ServerResponse(httplib.OK, message="success")
 
-# ------------------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------------------
-class ScriptUploadForm(object):
-    """Defines the incoming payload from the client
-    """
-    required_fields = ("author", "mail", "comment", "path", "file")
-
-    @classmethod
-    def create(cls, environ):
-        request_fields = cgi.FieldStorage(fp=environ['wsgi.input'],
-                                          environ=environ, keep_blank_values=1)
-        # sanity check
-        data = dict()
-        missing, invalid = [], []
-        for name in cls.required_fields:
-            if name in request_fields:
-                value = request_fields[name].value
-                if value:
-                    data[name] = value
-                else:
-                    invalid.append(name)
-            else:
-                missing.append(name)
-        #endfor
-        if len(missing) == 0 and len(invalid) == 0:
-            return ScriptUploadForm(**data), None
-        else:
-            summary = 'Incomplete form information supplied.'
-            detail = []
-            if len(missing) > 0:
-                detail.append('Missing fields: ' + ','.join(missing))
-            if len(invalid) > 0:
-                detail.append('Invalid fields: ' + ','.join(invalid))
-            return None, (summary, "\n".join(detail))
-
-    def __init__(self, author, mail, comment, path, file):
-        self.author = author
-        self.mail = mail
-        self.comment = comment
-        self.path = path
-        self.file = file
-
-class Response(object):
-
-    def __init__(self, status_code, message, detail=None,
-                 published_date=None, shell=None):
-        self._create_status(status_code)
-        self._create_body(message, detail,
-                          published_date, shell)
-        self._create_headers()
-
-    def _create_status(self, code):
-        self.status = "{0} {1}".format(str(code), httplib.responses[code])
-
-    def _create_headers(self):
-        self.headers = [
-            ('Content-Type', 'application/json; charset=utf-8'),
-            ('Content-Length', str(len(self.content)))
-        ]
-
-    def _create_body(self, message, detail, published_date, shell):
-        detail = detail if detail is not None else ""
-        pub_date = published_date if published_date is not None else ""
-        shell = shell if shell is not None else ""
-        data = dict(message=message, detail=detail, pub_date=pub_date, shell=shell)
-        self.content = json.dumps(data, encoding='utf-8')
 
 class GitRepository(object):
      """Models a git repo. Currently it needs to have been cloned first.
