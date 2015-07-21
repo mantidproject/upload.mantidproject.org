@@ -20,7 +20,7 @@ TEST_APP = None
 # Temporary git repository path
 TEMP_GIT_REPO_PATH = os.path.join(tempfile.gettempdir(), "scriptrepository_unittest")
 # Temporary git repository path
-TEMP_GIT_REPO_PATH_REMOTE = os.path.join(tempfile.gettempdir(), "scriptrepository_unittest_remote")
+TEMP_GIT_REMOTE_PATH = os.path.join(tempfile.gettempdir(), "scriptrepository_unittest_remote")
 
 SCRIPT_CONTENT = \
 """
@@ -35,24 +35,24 @@ def setUpModule():
     _setup_test_git_repos()
 
 def tearDownModule():
-    pass
     shutil.rmtree(TEMP_GIT_REPO_PATH)
+    shutil.rmtree(TEMP_GIT_REMOTE_PATH)
 
 def _setup_test_git_repos():
-    os.mkdir(TEMP_GIT_REPO_PATH_REMOTE)
+    os.mkdir(TEMP_GIT_REMOTE_PATH)
     start_dir = os.getcwd()
 
     # Init the remote
-    os.chdir(TEMP_GIT_REPO_PATH_REMOTE)
+    os.chdir(TEMP_GIT_REMOTE_PATH)
     subprocess.check_output("git init", stderr=subprocess.STDOUT, shell=True)
     # Create a commit so we can use reset
-    readme = os.path.join(TEMP_GIT_REPO_PATH_REMOTE, "README.md")
+    readme = os.path.join(TEMP_GIT_REMOTE_PATH, "README.md")
     open(readme, 'w').write("foo")
     subprocess.check_output("git add .; git commit -m'Initial commit';exit 0",
                             stderr=subprocess.STDOUT, shell=True)
     # Clone this so that the clone will have a remote
     os.chdir(os.path.dirname(TEMP_GIT_REPO_PATH))
-    cmd = "git clone {0} {1}; exit 0".format(TEMP_GIT_REPO_PATH_REMOTE, TEMP_GIT_REPO_PATH)
+    cmd = "git clone {0} {1}; exit 0".format(TEMP_GIT_REMOTE_PATH, TEMP_GIT_REPO_PATH)
     subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
 
     # Go back to where we started

@@ -115,8 +115,10 @@ def push_to_repository(script_form, git_repo):
 
     commit_info = GitCommitInfo(author=script_form.author,
                                 email=script_form.mail,
+                                comment=script_form.comment,
                                 filelist=[filepath],
                                 committer=GIT_COMMITTER_NAME)
+
     error = git_repo.commit_and_push(commit_info)
     if error:
         return ServerResponse(httplib.INTERNAL_SERVER_ERROR,
