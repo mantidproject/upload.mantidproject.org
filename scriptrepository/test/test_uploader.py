@@ -11,7 +11,7 @@ from webtest import TestApp
 
 # Our application
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from application.server import application
+from uploader.app import application
 
 # Local server
 TEST_APP = None
