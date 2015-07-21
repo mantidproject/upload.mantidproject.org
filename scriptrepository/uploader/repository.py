@@ -42,6 +42,10 @@ class GitRepository(object):
     def push(self):
         pass
 
+    def reset(self, sha1, hard=True):
+        """Performs a hard reset to the given treeish """
+        self._git("reset", args=["--hard",sha1])
+
     def _git(self, args):
         _shellcmd("git", args)
 
