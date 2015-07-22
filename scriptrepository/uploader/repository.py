@@ -23,8 +23,7 @@ def _shellcmd(cmd, args):
         subp.check_output(cmd, stderr=subp.STDOUT,
                           shell=True)
     except subp.CalledProcessError, err:
-        error = str(err)
-    return error
+        raise RuntimeError(err)
 
 @contextmanager
 def _directory(path):
@@ -46,34 +45,49 @@ class GitRepository(object):
                              'It must be have been cloned first.'.format(path))
         self.root = path
 
-    def commit_and_push(self, commit, reset_first=True):
+    def commit_and_push(self, commit):
         with _directory(self.root):
-            error = None
-            if reset_first:
-                error = self.reset("origin/master")
-            if error:
-                return ["Git error", error]
+            try:
+                remote, branch = "origin", "master"
+                # If anyone has messed around locally,
+                # make sure we are at the current origin
+                self.reset(remote + "/" + branch)
+                # Update
+                self.pull(rebase=True)
+                self.add(commit.filelist)
+                self.commit(commit.author, commit.email,
+                            commit.committer, commit.comment)
+                self.push(remote, branch)
+            except RuntimeError, err:
+                return ["Git error", str(err)]
 
-    def commit(self, commit):
+        return None
+
+    def reset(self, sha1):
+        """Performs a hard reset to the given treeish reference"""
+        return self._git("reset", args=["--hard",sha1])
+
+    def add(self, filelist):
+        self._git("add", filelist)
+
+    def commit(self, author, email, committer, msg):
         """Commits all of the changes detailed by the CommitInfo object"""
-        author = '--author="{0} <{1}>"'.format(commit.author, commit.email)
-        msg = '--message="{0}"'.format(commit.comment)
+        author = '--author="{0} <{1}>"'.format(author, email)
+        msg = '--message="{0}"'.format(msg)
 
-        os.environ['GIT_COMMITTER_NAME'] = commit.committer
+        # Only way to reset the committer without
+        os.environ['GIT_COMMITTER_NAME'] = committer
         error = self._git('commit',[msg, author])
         del os.environ["GIT_COMMITTER_NAME"]
 
         return error
 
     def pull(self, rebase=True):
-        pass
+        args = ["--rebase"] if rebase else []
+        self._git("pull", args)
 
-    def push(self):
-        pass
-
-    def reset(self, sha1):
-        """Performs a hard reset to the given treeish reference"""
-        return self._git("reset", args=["--hard",sha1])
+    def push(self, remote, branch):
+        self._git("push", [remote, branch])
 
     def _git(self, cmd, args):
         args.insert(0, cmd)

@@ -50,6 +50,11 @@ def _setup_test_git_repos():
     open(readme, 'w').write("foo")
     subprocess.check_output("git add .; git commit -m'Initial commit';exit 0",
                             stderr=subprocess.STDOUT, shell=True)
+    # Chcekout out to some commit directly so that pushing to master is allowed
+    sha1 = subprocess.check_output("git rev-parse HEAD;exit 0",
+                            stderr=subprocess.STDOUT, shell=True)
+    subprocess.check_output("git checkout {0};exit 0".format(sha1.rstrip()),
+                            stderr=subprocess.STDOUT, shell=True)
     # Clone this so that the clone will have a remote
     os.chdir(os.path.dirname(TEMP_GIT_REPO_PATH))
     cmd = "git clone {0} {1}; exit 0".format(TEMP_GIT_REMOTE_PATH, TEMP_GIT_REPO_PATH)
@@ -57,7 +62,6 @@ def _setup_test_git_repos():
 
     # Go back to where we started
     os.chdir(start_dir)
-
 
 # ------------------------------------------------------------------------------
 
@@ -78,6 +82,12 @@ class ScriptUploadServerTest(unittest.TestCase):
         self.check_replied_content(expected_json=dict(message='success', detail='',
                                                       pub_date=self._now_as_str(), shell=''),
                                    actual_str=response.body)
+        # Is the file where we expect it to be
+        repo_file = os.path.join(TEMP_GIT_REPO_PATH, "muon", "userscript.py")
+        self.assertTrue(os.path.exists(repo_file))
+        content = open(repo_file, 'r').read()
+        self.assertEquals(SCRIPT_CONTENT, content)
+
 
     # ---------------- Failure cases ---------------------
 
