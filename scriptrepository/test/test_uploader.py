@@ -1,4 +1,5 @@
 import datetime
+import glob
 import httplib2
 import json
 import os
@@ -21,6 +22,8 @@ TEST_APP = None
 TEMP_GIT_REPO_PATH = os.path.join(tempfile.gettempdir(), "scriptrepository_unittest")
 # Temporary git repository path
 TEMP_GIT_REMOTE_PATH = os.path.join(tempfile.gettempdir(), "scriptrepository_unittest_remote")
+# Prefix for wsgi error files
+ERR_STREAM_PREFIX = os.path.join(tempfile.gettempdir(),"ScriptUploadServerTest_")
 
 SCRIPT_CONTENT = \
 """
@@ -34,12 +37,6 @@ FIRST_COMMIT = None
 def setUpModule():
     global TEST_APP
     TEST_APP = TestApp(application)
-    _setup_test_git_repos()
-
-def tearDownModule():
-    #shutil.rmtree(TEMP_GIT_REPO_PATH)
-    #shutil.rmtree(TEMP_GIT_REMOTE_PATH)
-    pass
 
 def _setup_test_git_repos():
     global FIRST_COMMIT
@@ -69,31 +66,16 @@ def _setup_test_git_repos():
     # Go back to where we started
     os.chdir(start_dir)
 
-def _reset_test_git_repos():
-    """Reset the test git repos to point to the initial commit
-    """
-    start_dir = os.getcwd()
-    os.chdir(TEMP_GIT_REPO_PATH)
-    subp.check_output("git reset --hard {0};exit 0".format(FIRST_COMMIT.rstrip()),
-                            stderr=subp.STDOUT, shell=True)
-    os.chdir(TEMP_GIT_REMOTE_PATH)
-    subp.check_output("git checkout master; git reset --hard {0};exit 0".format(FIRST_COMMIT.rstrip()),
-                            stderr=subp.STDOUT, shell=True)
-    subp.check_output("git checkout {0};exit 0".format(FIRST_COMMIT),
-                            stderr=subp.STDOUT, shell=True)
-
-    # Go back to where we started
-    os.chdir(start_dir)
-
 # ------------------------------------------------------------------------------
 
 class ScriptUploadServerTest(unittest.TestCase):
 
     def setUp(self):
-        _reset_test_git_repos()
+        _setup_test_git_repos()
 
     def tearDown(self):
-        _reset_test_git_repos()
+        shutil.rmtree(TEMP_GIT_REPO_PATH)
+        shutil.rmtree(TEMP_GIT_REMOTE_PATH)
 
     # ---------------- Success cases ---------------------
 
@@ -101,7 +83,7 @@ class ScriptUploadServerTest(unittest.TestCase):
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
         response = TEST_APP.post('/', extra_environ=extra_environ,
-                                 params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)])
+                                 params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)], status='*')
         expected_resp = {
             'status': '200 OK',
             'content-length': 85,
@@ -117,9 +99,10 @@ class ScriptUploadServerTest(unittest.TestCase):
         content = open(repo_file, 'r').read()
         self.assertEquals(SCRIPT_CONTENT, content)
 
-    def xtest_app_returns_200_for_successful_remove_request(self):
+    def test_app_returns_200_for_successful_remove_request(self):
         # Commit test file
         repo_file = os.path.join(TEMP_GIT_REPO_PATH, "muon", "userscript.py")
+        os.mkdir(os.path.dirname(repo_file))
         open(repo_file, 'w').write("foo")
         start_dir = os.getcwd()
         os.chdir(TEMP_GIT_REPO_PATH)
@@ -131,7 +114,7 @@ class ScriptUploadServerTest(unittest.TestCase):
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', file_n='muon/userscript.py')
         response = TEST_APP.post('/?remove=1', extra_environ=extra_environ,
-                                 params=data)
+                                 params=data, status='*')
         expected_resp = {
             'status': '200 OK',
             'content-length': 85,

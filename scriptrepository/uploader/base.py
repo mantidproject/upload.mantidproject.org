@@ -35,8 +35,10 @@ class ScriptForm(object):
         #endfor
         if len(missing) == 0 and len(invalid) == 0:
             # Use the filtiem not the actual content
-            del data["file"]
-            data["fileitem"] = request_fields[name]
+            # if we have it
+            if "file" in data:
+                del data["file"]
+                data["fileitem"] = request_fields[name]
             return cls(**data), None
         else:
             summary = 'Incomplete form information supplied.'

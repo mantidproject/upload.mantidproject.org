@@ -33,7 +33,7 @@ def _shellcmd(cmd, args=[]):
     if p.returncode == 0:
         return stdout
     else:
-        raise RuntimeError(stderr)
+        raise RuntimeError(stdout + stderr)
 
 #-------------------------------------------------------------------------------
 @contextmanager
@@ -43,10 +43,10 @@ def transaction(git_repo):
     git_repo.begin()
     try:
         yield None
-    except:
+    except Exception, exc:
         git_repo.rollback()
         os.chdir(dir_on_enter)
-        raise
+        raise exc
     else:
         os.chdir(dir_on_enter)
 

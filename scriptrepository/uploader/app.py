@@ -31,6 +31,7 @@ from __future__ import absolute_import, print_function
 import httplib
 import os
 import time
+import traceback
 from urlparse import parse_qs
 
 from .base import ScriptRemovalForm, ScriptUploadForm, ServerResponse
@@ -77,10 +78,11 @@ def application(environ, start_response):
 # Handler methods
 # ------------------------------------------------------------------------------
 def handle_post(environ):
+    err_stream = environ["wsgi.errors"]
     try:
         script_form, debug = parse_request(environ)
-        local_repo_root = get_local_repo_path(environ, debug)
-        return update_central_repo(local_repo_root, script_form, environ["wsgi.errors"])
+        local_repo_root = get_local_repo_path(environ, debug, err_stream)
+        return update_central_repo(local_repo_root, script_form, err_stream)
     except RequestException, err:
         return err.response()
 
@@ -107,13 +109,14 @@ def parse_request(environ):
 
     return script_form, debug
 
-def get_local_repo_path(environ, debug):
+def get_local_repo_path(environ, debug, err_stream):
     envvar = 'SCRIPT_REPOSITORY_PATH'
     if debug:
         envvar += "_DEBUG"
     try:
         return environ[envvar]
     except KeyError:
+        err_stream.write("Script repository upload: Cannot find environment variable pointing to the repository")
         raise InternalServerError()
 
 # ------------------------------------------------------------------------------
@@ -131,7 +134,8 @@ def update_central_repo(local_repo_root, script_form, err_stream):
         filepath, error = script_form.write_script_to_disk(local_repo_root)
         is_upload = True
         if error:
-            raise InternalServerError(error[0], "\n".join(error[1:]))
+            err_stream.write("Script repository upload: error writing script to disk - {0}.".format(str(error[0])))
+            raise InternalServerError()
     else:
         filepath = script_form.filepath(local_repo_root)
         # Treated as a remove request
@@ -146,8 +150,8 @@ def update_central_repo(local_repo_root, script_form, err_stream):
                                 add=is_upload)
     try:
         git_repo.commit_and_push(commit_info)
-    except RuntimeError, err:
-        err_stream.write("Script repository upload: git error - {0}.".format(str(err)))
+    except RuntimeError:
+        err_stream.write("Script repository upload: git error - {0}.".format(traceback.format_exc()))
         raise InternalServerError()
 
     return ServerResponse(httplib.OK, message="success",
