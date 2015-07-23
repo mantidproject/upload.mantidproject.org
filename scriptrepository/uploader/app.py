@@ -31,8 +31,10 @@ from __future__ import absolute_import, print_function
 import httplib
 import os
 import time
+from urlparse import parse_qs
 
-from .base import ScriptUploadForm, ServerResponse
+from .base import ScriptRemovalForm, ScriptUploadForm, ServerResponse
+from .errors import BadRequestException, InternalServerError, RequestException
 from .repository import GitCommitInfo, GitRepository
 
 # Map requests to handlers
@@ -50,7 +52,7 @@ _REQUEST_HANDLERS = {
 MAX_FILESIZE_BYTES=1*1024*1024
 
 # Comitter's name
-GIT_COMMITTER_NAME = "mantid-publisher"
+COMMITTER_NAME = "mantid-publisher"
 
 # -----------------------------------------------------------------------------
 # Entry point
@@ -75,58 +77,86 @@ def application(environ, start_response):
 # Handler methods
 # ------------------------------------------------------------------------------
 def handle_post(environ):
-    script_form, error = ScriptUploadForm.create(environ)
-    if error is not None:
-        return ServerResponse(httplib.BAD_REQUEST, message=error[0], detail='\n'.join(error[1:]))
+    try:
+        script_form, debug = parse_request(environ)
+    # except BadRequestException, err:
+    #     return err.response()
 
-    # Process payload
-    return update_central_repo(environ, script_form)
+    # try:
+        local_repo_root = get_local_repo_path(environ, debug)
+    # except InternalServerError, err:
+    #     return err.response()
+
+    # # Process payload
+    # try:
+        return update_central_repo(local_repo_root, script_form)
+    except RequestException, err:
+        return err.response()
 
 def null_handler(environ):
     return ServerResponse(httplib.METHOD_NOT_ALLOWED, message=u'Endpoint is ready to accept form uploads.')
 
 # ------------------------------------------------------------------------------
+# Request checks
+# ------------------------------------------------------------------------------
+def parse_request(environ):
+    """Check the request return the type to the caller
+    """
+    query_params = parse_qs(environ["QUERY_STRING"])
+    is_upload = ("remove" not in query_params)
+    debug = ("debug" in query_params)
+
+    if is_upload:
+        cls = ScriptUploadForm
+    else:
+        cls = ScriptRemovalForm
+    script_form, error = cls.create(environ)
+    if error:
+        raise BadRequestException(summary=error[0], detail='\n'.join(error[1:]))
+
+    return script_form, debug
+
+def get_local_repo_path(environ, debug):
+    envvar = 'SCRIPT_REPOSITORY_PATH'
+    if debug:
+        envvar += "_DEBUG"
+    try:
+        return environ[envvar]
+    except KeyError:
+        raise InternalServerError()
+
+# ------------------------------------------------------------------------------
 # Repository update
 # ------------------------------------------------------------------------------
-def update_central_repo(environ, script_form):
+def update_central_repo(local_repo_root, script_form):
     """This assumes that the script is running as a user who has permissions
     to push to the central github repository
     """
-    try:
-        script_repo_path = environ["SCRIPT_REPOSITORY_PATH"]
-    except KeyError:
-        environ["wsgi.errors"].write("Invalid server configuration: SCRIPT_REPOSITORY_PATH environment variable not defined.\n")
-        return ServerResponse(httplib.INTERNAL_SERVER_ERROR, message="Server Error. Please contact Mantid support.")
-
+    git_repo = GitRepository(local_repo_root)
     # size limit
     if script_form.filesize > MAX_FILESIZE_BYTES:
-        return ServerResponse(httplib.BAD_REQUEST, message="File is too large.",
-                              detail="Maximum filesize is {0} bytes".format(MAX_FILESIZE_BYTES))
+        raise BadRequestException("File is too large.",
+                                  "Maximum filesize is {0} bytes".format(MAX_FILESIZE_BYTES))
 
-    git_repo = GitRepository(script_repo_path)
     return push_to_repository(script_form, git_repo)
-
 
 def push_to_repository(script_form, git_repo):
     filepath, error = script_form.write_script_to_disk(git_repo.root)
     if error:
-        return ServerResponse(httplib.INTERNAL_SERVER_ERROR, message=error[0],
-                              detail="\n".join(error[1:]))
+        raise InternalServerError(error[0], "\n".join(error[1:]))
 
     commit_info = GitCommitInfo(author=script_form.author,
                                 email=script_form.mail,
                                 comment=script_form.comment,
                                 filelist=[filepath],
-                                committer=GIT_COMMITTER_NAME)
+                                committer=COMMITTER_NAME)
 
     error = git_repo.commit_and_push(commit_info)
     if error:
-        return ServerResponse(httplib.INTERNAL_SERVER_ERROR,
-                              message=error[0],
-                              detail="\n".join(error[1:]))
-    else:
-        return ServerResponse(httplib.OK, message="success",
-                              published_date=published_date(filepath))
+        raise InternalServerError(error[0], "\n".join(error[1:]))
+
+    return ServerResponse(httplib.OK, message="success",
+                          published_date=published_date(filepath))
 
 def published_date(filepath):
     timeformat = "%Y-%b-%d %H:%M:%S"

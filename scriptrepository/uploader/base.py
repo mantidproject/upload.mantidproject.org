@@ -16,6 +16,37 @@ class ScriptForm(object):
 
     required_fields = ("author", "mail", "comment")
 
+    @classmethod
+    def create(cls, environ):
+        request_fields = cgi.FieldStorage(fp=environ['wsgi.input'],
+                                          environ=environ, keep_blank_values=1)
+        # sanity check
+        data = dict()
+        missing, invalid = [], []
+        for name in cls.required_fields:
+            if name in request_fields:
+                value = request_fields[name].value
+                if cls.validate_field(name, value):
+                    data[name] = value
+                else:
+                    invalid.append(name)
+            else:
+                missing.append(name)
+        #endfor
+        if len(missing) == 0 and len(invalid) == 0:
+            # Use the filtiem not the actual content
+            del data["file"]
+            data["fileitem"] = request_fields[name]
+            return cls(**data), None
+        else:
+            summary = 'Incomplete form information supplied.'
+            detail = []
+            if len(missing) > 0:
+                detail.append('Missing fields: ' + ','.join(missing))
+            if len(invalid) > 0:
+                detail.append('Invalid fields: ' + ','.join(invalid))
+            return None, (summary, "\n".join(detail))
+
     @staticmethod
     def validate_field(name, value):
         if name == "mail":
@@ -38,19 +69,19 @@ class ScriptUploadForm(ScriptForm):
     required_fields = ScriptForm.required_fields  + ("path", "file")
 
     def __init__(self, author, mail, comment, path, fileitem):
-        super(ScriptUploadForm).__init__(self, author, mail, comment)
+        super(ScriptUploadForm, self).__init__(author, mail, comment)
 
         self.rel_path = path
         self.fileitem = fileitem
+
+    @property
+    def filesize(self):
+        return len(self.fileitem.value)
 
     def filepath(self, root):
         # strip leading path from filename to avoid directory traversal attacks
         filename = os.path.basename(self.fileitem.filename)
         return os.path.join(root, self.rel_path, filename)
-
-    @property
-    def filesize(self):
-        return len(self.fileitem.value)
 
     def write_script_to_disk(self, root):
         """Dumps the uploaded file contents to disk. The location is
@@ -72,51 +103,14 @@ class ScriptUploadForm(ScriptForm):
 # ------------------------------------------------------------------------------
 class ScriptRemovalForm(ScriptForm):
 
-    required_files = ScriptForm.required_files + ("file_n",)
+    required_fields = ScriptForm.required_fields + ("file_n",)
 
     def __init__(self, author, mail, comment, file_n):
-        super(ScriptRemovalForm).__init__(self, author, mail, comment)
+        super(ScriptRemovalForm, self).__init__(author, mail, comment)
         self.filename = file_n
 
-# ------------------------------------------------------------------------------
-
-class ScriptFormBuilder(object):
-
-    def __init__(self):
-        self.fields = dict()
-
-    def add_field(self, name, value):
-        self.fields[name] = value
-
-    # def build(self):
-    #     request_fields = cgi.FieldStorage(fp=environ['wsgi.input'],
-    #                                       environ=environ, keep_blank_values=1)
-    #     # sanity check
-    #     data = dict()
-    #     missing, invalid = [], []
-    #     for name in cls.required_fields:
-    #         if name in request_fields:
-    #             value = request_fields[name].value
-    #             if cls.validate_field(name, value):
-    #                 data[name] = value
-    #             else:
-    #                 invalid.append(name)
-    #         else:
-    #             missing.append(name)
-    #     #endfor
-    #     if len(missing) == 0 and len(invalid) == 0:
-    #         # Use the filtiem not the actual content
-    #         del data["file"]
-    #         data["fileitem"] = request_fields[name]
-    #         return ScriptUploadForm(**data), None
-    #     else:
-    #         summary = 'Incomplete form information supplied.'
-    #         detail = []
-    #         if len(missing) > 0:
-    #             detail.append('Missing fields: ' + ','.join(missing))
-    #         if len(invalid) > 0:
-    #             detail.append('Invalid fields: ' + ','.join(invalid))
-    #         return None, (summary, "\n".join(detail))
+    def filepath(self, root):
+        return os.path.join(root, self.filename)
 
 # ------------------------------------------------------------------------------
 
