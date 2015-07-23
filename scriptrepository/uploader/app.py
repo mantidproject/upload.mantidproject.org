@@ -149,18 +149,10 @@ def update_central_repo(local_repo_root, script_form, err_stream):
                                 committer=COMMITTER_NAME,
                                 add=is_upload)
     try:
-        git_repo.commit_and_push(commit_info)
+        published_date = git_repo.commit_and_push(commit_info, add_changes=is_upload)
     except RuntimeError:
         err_stream.write("Script repository upload: git error - {0}.".format(traceback.format_exc()))
         raise InternalServerError()
 
     return ServerResponse(httplib.OK, message="success",
-                          published_date=published_date(filepath))
-
-def published_date(filepath):
-    timeformat = "%Y-%b-%d %H:%M:%S"
-    stat = os.stat(filepath)
-    modified_time = int(stat.st_mtime)
-    # The original code added 2 minutes to the modification date of the file
-    # so we preserve this behaviour here
-    return time.strftime(timeformat, time.gmtime(modified_time + 120))
+                          published_date=published_date)

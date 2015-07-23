@@ -8,6 +8,7 @@ The support is limited to the following abilities:
 from contextlib import contextmanager
 import os
 import subprocess as subp
+import time
 
 # ------------------------------------------------------------------------------
 # Helper Functions
@@ -70,7 +71,7 @@ class GitRepository(object):
     def rollback(self):
         self.reset(self._sha1_at_begin)
 
-    def commit_and_push(self, commit, remove=False):
+    def commit_and_push(self, commit, add_changes=True):
         """This method is transactional. Any failure results in everything
         being rolled back
         """
@@ -81,12 +82,17 @@ class GitRepository(object):
             self.reset(remote + "/" + branch)
             # Update
             self.pull(rebase=True)
-            self.add(commit.filelist)
+            if add_changes:
+                pub_date = self._published_date(commit.filelist[0])
+                self.add(commit.filelist)
+            else:
+                self.remove(commit.filelist)
+                pub_date = ''
             self.commit(commit.author, commit.email,
                         commit.committer, commit.comment)
             self.push(remote, branch)
 
-        return None
+        return pub_date
 
     def reset(self, sha1):
         """Performs a hard reset to the given treeish reference"""
@@ -94,6 +100,9 @@ class GitRepository(object):
 
     def add(self, filelist):
         _git("add", filelist)
+
+    def remove(self, filelist):
+        _git("rm", filelist)
 
     def commit(self, author, email, committer, msg):
         """Commits all of the changes detailed by the CommitInfo object"""
@@ -103,10 +112,16 @@ class GitRepository(object):
 
         # Only way to reset the committer without
         os.environ['GIT_COMMITTER_NAME'] = committer
-        error = _git('commit',[msg, author])
+        _git('commit',[msg, author])
         del os.environ["GIT_COMMITTER_NAME"]
 
-        return error
+    def _published_date(self, filepath):
+        timeformat = "%Y-%b-%d %H:%M:%S"
+        stat = os.stat(filepath)
+        modified_time = int(stat.st_mtime)
+        # The original code added 2 minutes to the modification date of the file
+        # so we preserve this behaviour here
+        return time.strftime(timeformat, time.gmtime(modified_time + 120))
 
     def pull(self, rebase=True):
         args = ["--rebase"] if rebase else []

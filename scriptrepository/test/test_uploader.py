@@ -1,5 +1,4 @@
 import datetime
-import glob
 import httplib2
 import json
 import os
@@ -7,7 +6,6 @@ import shutil
 import subprocess as subp
 import sys
 import tempfile
-import time
 import unittest
 from urllib import urlencode
 from webtest import TestApp
@@ -81,7 +79,7 @@ class ScriptUploadServerTest(unittest.TestCase):
 
     def test_app_returns_200_for_successful_upload(self):
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
-        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
+        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Added new file', path='./muon')
         response = TEST_APP.post('/', extra_environ=extra_environ,
                                  params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)], status='*')
         expected_resp = {
@@ -106,18 +104,18 @@ class ScriptUploadServerTest(unittest.TestCase):
         open(repo_file, 'w').write("foo")
         start_dir = os.getcwd()
         os.chdir(TEMP_GIT_REPO_PATH)
-        subp.check_output('git add .; git commit -m"Added file"; git push origin master; exit 0',
+        subp.check_output('git add .; git commit -m"Added new file"; git push origin master; exit 0',
                           stderr=subp.STDOUT, shell=True)
         os.chdir(start_dir)
 
         # Test remove
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
-        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', file_n='muon/userscript.py')
+        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Removed file', file_n='muon/userscript.py')
         response = TEST_APP.post('/?remove=1', extra_environ=extra_environ,
                                  params=data, status='*')
         expected_resp = {
             'status': '200 OK',
-            'content-length': 85,
+            'content-length': 65,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
@@ -190,6 +188,35 @@ class ScriptUploadServerTest(unittest.TestCase):
         self.check_replied_content(expected_json=dict(message='File is too large.', detail='Maximum filesize is 1048576 bytes',
                                                       pub_date='', shell=''), actual_str=response.body)
 
+    def test_app_returns_400_trying_to_remove_file_by_different_author(self):
+        # Commit test file
+        repo_file = os.path.join(TEMP_GIT_REPO_PATH, "muon", "userscript.py")
+        os.mkdir(os.path.dirname(repo_file))
+        open(repo_file, 'w').write("foo")
+        start_dir = os.getcwd()
+        os.chdir(TEMP_GIT_REPO_PATH)
+        author = "Jenny Bloggs"
+        mail = "<j.b@testdomain.com>"
+        subp.check_output('git add .; git commit -m"Added new file" --author="{0} <{1}>"; git push origin master; exit 0'.format(author, mail),
+                          stderr=subp.STDOUT, shell=True)
+        os.chdir(start_dir)
+
+        # Test remove
+        extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
+        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Removed file', file_n='muon/userscript.py')
+        response = TEST_APP.post('/?remove=1', extra_environ=extra_environ,
+                                 params=data, status='*')
+        expected_resp = {
+            'status': '400 Bad Request',
+            'content-length': 65,
+            'content-type': 'application/json'
+        }
+        self.check_response(expected=expected_resp, actual=response)
+        self.check_replied_content(expected_json=dict(message='You are not allowed to remove this file as it belongs to another user.',
+                                                      detail='', pub_date='', shell=''),
+                                   actual_str=response.body)
+        # Is the file still there?
+        self.assertTrue(os.path.exists(repo_file))
 
     def test_server_without_correct_environment_returns_500_error(self):
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
