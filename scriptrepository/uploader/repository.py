@@ -22,10 +22,8 @@ def _shellcmd(cmd, args=[]):
     """Use subprocess to call a given command.
     Return stdout/stderr if an error occurred
     """
-    #cmd = '{0} {1}'.format(cmd, ' '.join(args))
     cmd = [cmd]
     cmd.extend(args)
-    open("/tmp/mylog.txt","a").write(str(cmd))
     try:
         p = subp.Popen(cmd, stdout=subp.PIPE, stderr=subp.PIPE)
     except ValueError, err:
@@ -50,6 +48,14 @@ def transaction(git_repo):
         raise exc
     else:
         os.chdir(dir_on_enter)
+
+#-------------------------------------------------------------------------------
+@contextmanager
+def dir_change(newdir):
+    dir_on_enter = os.getcwd()
+    os.chdir(newdir)
+    yield None
+    os.chdir(dir_on_enter)
 
 # ------------------------------------------------------------------------------
 # Classes
@@ -104,10 +110,15 @@ class GitRepository(object):
     def remove(self, filelist):
         _git("rm", filelist)
 
+    def user_can_delete(self, filename, author, mail):
+        with dir_change(self.root):
+            file_owner = _git("log", ['-1', '--format=%an <%ae>', filename]).rstrip()
+            req_user = '{0} <{1}>'.format(author, mail)
+        return (req_user == file_owner)
+
     def commit(self, author, email, committer, msg):
         """Commits all of the changes detailed by the CommitInfo object"""
         author = '--author="{0} <{1}>"'.format(author, email)
-        #open("/tmp/mylog.txt","w").write(msg)
         msg = '-m {0}'.format(msg)
 
         # Only way to reset the committer without

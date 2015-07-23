@@ -104,13 +104,15 @@ class ScriptUploadServerTest(unittest.TestCase):
         open(repo_file, 'w').write("foo")
         start_dir = os.getcwd()
         os.chdir(TEMP_GIT_REPO_PATH)
-        subp.check_output('git add .; git commit -m"Added new file"; git push origin master; exit 0',
+        author = 'Joe Bloggs'
+        mail = 'first.last@domain.com'
+        subp.check_output('git add .; git commit -m"Added new file" --author="{0} <{1}>"; git push origin master; exit 0'.format(author, mail),
                           stderr=subp.STDOUT, shell=True)
         os.chdir(start_dir)
 
         # Test remove
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
-        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Removed file', file_n='muon/userscript.py')
+        data = dict(author=author, mail=mail, comment='Removed file', file_n='muon/userscript.py')
         response = TEST_APP.post('/?remove=1', extra_environ=extra_environ,
                                  params=data, status='*')
         expected_resp = {
@@ -208,12 +210,13 @@ class ScriptUploadServerTest(unittest.TestCase):
                                  params=data, status='*')
         expected_resp = {
             'status': '400 Bad Request',
-            'content-length': 65,
+            'content-length': 145,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='You are not allowed to remove this file as it belongs to another user.',
-                                                      detail='', pub_date='', shell=''),
+        self.check_replied_content(expected_json=dict(message='Permissions error.',
+                                                      detail='You are not allowed to remove this file as it belongs to another user',
+                                                      pub_date='', shell=''),
                                    actual_str=response.body)
         # Is the file still there?
         self.assertTrue(os.path.exists(repo_file))

@@ -126,22 +126,25 @@ def update_central_repo(local_repo_root, script_form, err_stream):
     """This assumes that the script is running as a user who has permissions
     to push to the central github repository
     """
+    git_repo = GitRepository(local_repo_root)
     if hasattr(script_form, 'write_script_to_disk'):
         # size limit
         if script_form.filesize > MAX_FILESIZE_BYTES:
             raise BadRequestException("File is too large.",
-                                  "Maximum filesize is {0} bytes".format(MAX_FILESIZE_BYTES))
+                                      "Maximum filesize is {0} bytes".format(MAX_FILESIZE_BYTES))
         filepath, error = script_form.write_script_to_disk(local_repo_root)
         is_upload = True
         if error:
             err_stream.write("Script repository upload: error writing script to disk - {0}.".format(str(error[0])))
             raise InternalServerError()
     else:
-        filepath = script_form.filepath(local_repo_root)
         # Treated as a remove request
         is_upload = False
+        filepath = script_form.filepath(local_repo_root)
+        if not git_repo.user_can_delete(filepath, script_form.author, script_form.mail):
+            raise BadRequestException('Permissions error.',
+                                      'You are not allowed to remove this file as it belongs to another user')
 
-    git_repo = GitRepository(local_repo_root)
     commit_info = GitCommitInfo(author=script_form.author,
                                 email=script_form.mail,
                                 comment=script_form.comment,
