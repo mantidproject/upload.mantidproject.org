@@ -79,17 +79,8 @@ def application(environ, start_response):
 def handle_post(environ):
     try:
         script_form, debug = parse_request(environ)
-    # except BadRequestException, err:
-    #     return err.response()
-
-    # try:
         local_repo_root = get_local_repo_path(environ, debug)
-    # except InternalServerError, err:
-    #     return err.response()
-
-    # # Process payload
-    # try:
-        return update_central_repo(local_repo_root, script_form)
+        return update_central_repo(local_repo_root, script_form, environ["wsgi.errors"])
     except RequestException, err:
         return err.response()
 
@@ -128,32 +119,36 @@ def get_local_repo_path(environ, debug):
 # ------------------------------------------------------------------------------
 # Repository update
 # ------------------------------------------------------------------------------
-def update_central_repo(local_repo_root, script_form):
+def update_central_repo(local_repo_root, script_form, err_stream):
     """This assumes that the script is running as a user who has permissions
     to push to the central github repository
     """
-    git_repo = GitRepository(local_repo_root)
-    # size limit
-    if script_form.filesize > MAX_FILESIZE_BYTES:
-        raise BadRequestException("File is too large.",
+    if hasattr(script_form, 'write_script_to_disk'):
+        # size limit
+        if script_form.filesize > MAX_FILESIZE_BYTES:
+            raise BadRequestException("File is too large.",
                                   "Maximum filesize is {0} bytes".format(MAX_FILESIZE_BYTES))
+        filepath, error = script_form.write_script_to_disk(local_repo_root)
+        is_upload = True
+        if error:
+            raise InternalServerError(error[0], "\n".join(error[1:]))
+    else:
+        filepath = script_form.filepath(local_repo_root)
+        # Treated as a remove request
+        is_upload = False
 
-    return push_to_repository(script_form, git_repo)
-
-def push_to_repository(script_form, git_repo):
-    filepath, error = script_form.write_script_to_disk(git_repo.root)
-    if error:
-        raise InternalServerError(error[0], "\n".join(error[1:]))
-
+    git_repo = GitRepository(local_repo_root)
     commit_info = GitCommitInfo(author=script_form.author,
                                 email=script_form.mail,
                                 comment=script_form.comment,
                                 filelist=[filepath],
-                                committer=COMMITTER_NAME)
-
-    error = git_repo.commit_and_push(commit_info)
-    if error:
-        raise InternalServerError(error[0], "\n".join(error[1:]))
+                                committer=COMMITTER_NAME,
+                                add=is_upload)
+    try:
+        git_repo.commit_and_push(commit_info)
+    except RuntimeError, err:
+        err_stream.write("Script repository upload: git error - {0}.".format(str(err)))
+        raise InternalServerError()
 
     return ServerResponse(httplib.OK, message="success",
                           published_date=published_date(filepath))

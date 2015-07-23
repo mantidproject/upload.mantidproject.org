@@ -3,7 +3,7 @@ import httplib2
 import json
 import os
 import shutil
-import subprocess
+import subprocess as subp
 import sys
 import tempfile
 import time
@@ -28,6 +28,8 @@ def hello(name):
     print "Hello, World"
 """
 
+FIRST_COMMIT = None
+
 # ------------------------------------------------------------------------------
 def setUpModule():
     global TEST_APP
@@ -35,30 +37,50 @@ def setUpModule():
     _setup_test_git_repos()
 
 def tearDownModule():
-    shutil.rmtree(TEMP_GIT_REPO_PATH)
-    shutil.rmtree(TEMP_GIT_REMOTE_PATH)
+    #shutil.rmtree(TEMP_GIT_REPO_PATH)
+    #shutil.rmtree(TEMP_GIT_REMOTE_PATH)
+    pass
 
 def _setup_test_git_repos():
+    global FIRST_COMMIT
+
     os.mkdir(TEMP_GIT_REMOTE_PATH)
     start_dir = os.getcwd()
 
     # Init the remote
     os.chdir(TEMP_GIT_REMOTE_PATH)
-    subprocess.check_output("git init", stderr=subprocess.STDOUT, shell=True)
+    subp.check_output("git init", stderr=subp.STDOUT, shell=True)
     # Create a commit so we can use reset
     readme = os.path.join(TEMP_GIT_REMOTE_PATH, "README.md")
     open(readme, 'w').write("foo")
-    subprocess.check_output("git add .; git commit -m'Initial commit';exit 0",
-                            stderr=subprocess.STDOUT, shell=True)
+    subp.check_output("git add .; git commit -m'Initial commit';exit 0",
+                            stderr=subp.STDOUT, shell=True)
     # Chcekout out to some commit directly so that pushing to master is allowed
-    sha1 = subprocess.check_output("git rev-parse HEAD;exit 0",
-                            stderr=subprocess.STDOUT, shell=True)
-    subprocess.check_output("git checkout {0};exit 0".format(sha1.rstrip()),
-                            stderr=subprocess.STDOUT, shell=True)
+    sha1 = subp.check_output("git rev-parse HEAD;exit 0",
+                            stderr=subp.STDOUT, shell=True)
+    FIRST_COMMIT = sha1.rstrip()
+    subp.check_output("git checkout {0};exit 0".format(FIRST_COMMIT),
+                            stderr=subp.STDOUT, shell=True)
     # Clone this so that the clone will have a remote
     os.chdir(os.path.dirname(TEMP_GIT_REPO_PATH))
     cmd = "git clone {0} {1}; exit 0".format(TEMP_GIT_REMOTE_PATH, TEMP_GIT_REPO_PATH)
-    subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+    subp.check_output(cmd, stderr=subp.STDOUT, shell=True)
+
+    # Go back to where we started
+    os.chdir(start_dir)
+
+def _reset_test_git_repos():
+    """Reset the test git repos to point to the initial commit
+    """
+    start_dir = os.getcwd()
+    os.chdir(TEMP_GIT_REPO_PATH)
+    subp.check_output("git reset --hard {0};exit 0".format(FIRST_COMMIT.rstrip()),
+                            stderr=subp.STDOUT, shell=True)
+    os.chdir(TEMP_GIT_REMOTE_PATH)
+    subp.check_output("git checkout master; git reset --hard {0};exit 0".format(FIRST_COMMIT.rstrip()),
+                            stderr=subp.STDOUT, shell=True)
+    subp.check_output("git checkout {0};exit 0".format(FIRST_COMMIT),
+                            stderr=subp.STDOUT, shell=True)
 
     # Go back to where we started
     os.chdir(start_dir)
@@ -67,7 +89,14 @@ def _setup_test_git_repos():
 
 class ScriptUploadServerTest(unittest.TestCase):
 
+    def setUp(self):
+        _reset_test_git_repos()
+
+    def tearDown(self):
+        _reset_test_git_repos()
+
     # ---------------- Success cases ---------------------
+
     def test_app_returns_200_for_successful_upload(self):
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
@@ -88,6 +117,32 @@ class ScriptUploadServerTest(unittest.TestCase):
         content = open(repo_file, 'r').read()
         self.assertEquals(SCRIPT_CONTENT, content)
 
+    def xtest_app_returns_200_for_successful_remove_request(self):
+        # Commit test file
+        repo_file = os.path.join(TEMP_GIT_REPO_PATH, "muon", "userscript.py")
+        open(repo_file, 'w').write("foo")
+        start_dir = os.getcwd()
+        os.chdir(TEMP_GIT_REPO_PATH)
+        subp.check_output('git add .; git commit -m"Added file"; git push origin master; exit 0',
+                          stderr=subp.STDOUT, shell=True)
+        os.chdir(start_dir)
+
+        # Test remove
+        extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
+        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', file_n='muon/userscript.py')
+        response = TEST_APP.post('/?remove=1', extra_environ=extra_environ,
+                                 params=data)
+        expected_resp = {
+            'status': '200 OK',
+            'content-length': 85,
+            'content-type': 'application/json'
+        }
+        self.check_response(expected=expected_resp, actual=response)
+        self.check_replied_content(expected_json=dict(message='success', detail='',
+                                                      pub_date='', shell=''),
+                                   actual_str=response.body)
+        # Is the file removed
+        self.assertTrue(not os.path.exists(repo_file))
 
     # ---------------- Failure cases ---------------------
 

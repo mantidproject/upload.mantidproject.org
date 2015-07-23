@@ -12,25 +12,43 @@ import subprocess as subp
 # ------------------------------------------------------------------------------
 # Helper Functions
 # ------------------------------------------------------------------------------
+def _git(cmd, args):
+    args.insert(0, cmd)
+    return _shellcmd("git", args)
 
-def _shellcmd(cmd, args):
+#-------------------------------------------------------------------------------
+def _shellcmd(cmd, args=[]):
     """Use subprocess to call a given command.
     Return stdout/stderr if an error occurred
     """
-    cmd = '{0} {1}'.format(cmd, ' '.join(args))
-    error = None
+    #cmd = '{0} {1}'.format(cmd, ' '.join(args))
+    cmd = [cmd]
+    cmd.extend(args)
+    open("/tmp/mylog.txt","a").write(str(cmd))
     try:
-        subp.check_output(cmd, stderr=subp.STDOUT,
-                          shell=True)
-    except subp.CalledProcessError, err:
+        p = subp.Popen(cmd, stdout=subp.PIPE, stderr=subp.PIPE)
+    except ValueError, err:
         raise RuntimeError(err)
+    stdout, stderr = p.communicate()
+    if p.returncode == 0:
+        return stdout
+    else:
+        raise RuntimeError(stderr)
 
+#-------------------------------------------------------------------------------
 @contextmanager
-def _directory(path):
+def transaction(git_repo):
     dir_on_enter = os.getcwd()
-    os.chdir(path)
-    yield
-    os.chdir(dir_on_enter)
+    os.chdir(git_repo.root)
+    git_repo.begin()
+    try:
+        yield None
+    except:
+        git_repo.rollback()
+        os.chdir(dir_on_enter)
+        raise
+    else:
+        os.chdir(dir_on_enter)
 
 # ------------------------------------------------------------------------------
 # Classes
@@ -45,60 +63,66 @@ class GitRepository(object):
                              'It must be have been cloned first.'.format(path))
         self.root = path
 
-    def commit_and_push(self, commit):
-        with _directory(self.root):
-            try:
-                remote, branch = "origin", "master"
-                # If anyone has messed around locally,
-                # make sure we are at the current origin
-                self.reset(remote + "/" + branch)
-                # Update
-                self.pull(rebase=True)
-                self.add(commit.filelist)
-                self.commit(commit.author, commit.email,
-                            commit.committer, commit.comment)
-                self.push(remote, branch)
-            except RuntimeError, err:
-                return ["Git error", str(err)]
+    def begin(self):
+        """Capture the current state so that we can rollback"""
+        self._sha1_at_begin = _git("rev-parse", ["HEAD"]).rstrip()
+
+    def rollback(self):
+        self.reset(self._sha1_at_begin)
+
+    def commit_and_push(self, commit, remove=False):
+        """This method is transactional. Any failure results in everything
+        being rolled back
+        """
+        with transaction(self):
+            remote, branch = "origin", "master"
+            # If anyone has messed around locally,
+            # make sure we are at the current origin
+            self.reset(remote + "/" + branch)
+            # Update
+            self.pull(rebase=True)
+            self.add(commit.filelist)
+            self.commit(commit.author, commit.email,
+                        commit.committer, commit.comment)
+            self.push(remote, branch)
 
         return None
 
     def reset(self, sha1):
         """Performs a hard reset to the given treeish reference"""
-        return self._git("reset", args=["--hard",sha1])
+        return _git("reset", args=["--hard",sha1])
 
     def add(self, filelist):
-        self._git("add", filelist)
+        _git("add", filelist)
 
     def commit(self, author, email, committer, msg):
         """Commits all of the changes detailed by the CommitInfo object"""
         author = '--author="{0} <{1}>"'.format(author, email)
-        msg = '--message="{0}"'.format(msg)
+        #open("/tmp/mylog.txt","w").write(msg)
+        msg = '-m {0}'.format(msg)
 
         # Only way to reset the committer without
         os.environ['GIT_COMMITTER_NAME'] = committer
-        error = self._git('commit',[msg, author])
+        error = _git('commit',[msg, author])
         del os.environ["GIT_COMMITTER_NAME"]
 
         return error
 
     def pull(self, rebase=True):
         args = ["--rebase"] if rebase else []
-        self._git("pull", args)
+        _git("pull", args)
 
     def push(self, remote, branch):
-        self._git("push", [remote, branch])
+        _git("push", [remote, branch])
 
-    def _git(self, cmd, args):
-        args.insert(0, cmd)
-        return _shellcmd("git", args)
-
+#-------------------------------------------------------------------------------
 class GitCommitInfo(object):
     """Models a git commit"""
 
-    def __init__(self, author, email, comment, filelist, committer=None):
+    def __init__(self, author, email, comment, filelist, committer=None, add=True):
         self.author = author
         self.committer = committer if committer is not None else author
         self.email = email
         self.comment = comment
         self.filelist = filelist
+        self.add = add
