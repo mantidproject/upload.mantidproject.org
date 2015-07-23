@@ -12,7 +12,7 @@ from webtest import TestApp
 
 # Our application
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from uploader.app import application
+from server.app import application
 
 # Local server
 TEST_APP = None
@@ -20,8 +20,6 @@ TEST_APP = None
 TEMP_GIT_REPO_PATH = os.path.join(tempfile.gettempdir(), "scriptrepository_unittest")
 # Temporary git repository path
 TEMP_GIT_REMOTE_PATH = os.path.join(tempfile.gettempdir(), "scriptrepository_unittest_remote")
-# Prefix for wsgi error files
-ERR_STREAM_PREFIX = os.path.join(tempfile.gettempdir(),"ScriptUploadServerTest_")
 
 SCRIPT_CONTENT = \
 """
