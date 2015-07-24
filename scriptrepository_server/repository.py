@@ -119,11 +119,12 @@ class GitRepository(object):
     def commit(self, author, email, committer, msg):
         """Commits all of the changes detailed by the CommitInfo object"""
         author = '--author="{0} <{1}>"'.format(author, email)
+        # We don't need to worry about spaces as each argument is fed through separately to subprocess.Popen
         msg = '-m {0}'.format(msg)
 
         # Only way to reset the committer without
         os.environ['GIT_COMMITTER_NAME'] = committer
-        _git('commit',[msg, author])
+        _git('commit',[author, msg])
         del os.environ["GIT_COMMITTER_NAME"]
 
     def _published_date(self, filepath):
