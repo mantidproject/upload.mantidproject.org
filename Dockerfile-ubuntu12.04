@@ -18,6 +18,9 @@ COPY scriptrepository_server.wsgi docker/var/www/wsgi_scripts/* /var/www/wsgi_sc
 # Application
 COPY scriptrepository_server/* /var/www/scriptrepository/application/scriptrepository_server/
 
+# New User
+RUN useradd -m mantid-publisher
+
 # Create a fake remote and local git repository
 RUN mkdir -p /var/www/scriptrepository/git && \
     git config --global user.name "Docker" && \
@@ -30,17 +33,20 @@ RUN cd /var/www/scriptrepository/git && \
      git add . && \
      git commit -m"Initial commit" && \
      git checkout $(git rev-parse HEAD) && \
-     chown -R www-data:www-data /var/www/scriptrepository/git/remote
+     chown -R mantid-publisher:mantid-publisher /var/www/scriptrepository/git/remote
 
 # Clone to local and have apache own it
 RUN cd /var/www/scriptrepository/git && \
     git clone /var/www/scriptrepository/git/remote local && \
-    chown -R www-data:www-data /var/www/scriptrepository/git/local
+    chown -R mantid-publisher:mantid-publisher /var/www/scriptrepository/git/local
+
+
 
 # Run on port 80
 EXPOSE 80
 
 # Simple startup script to avoid some issues observed with container restart
+RUN mkdir /var/run/apache2
 ADD docker/run-httpd.sh /run-httpd.sh
 RUN chmod -v +x /run-httpd.sh
 
