@@ -12,7 +12,7 @@ from webtest import TestApp
 
 # Our application
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from server.app import application
+from scriptrepository_server.app import application
 
 # Local server
 TEST_APP = None
