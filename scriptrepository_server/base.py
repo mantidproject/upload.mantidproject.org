@@ -95,7 +95,9 @@ class ScriptUploadForm(ScriptForm):
             return None, ("Cannot replace directory with a file.","{0} already exists as a directory.".format(filepath))
         try:
             # Make sure the directory exists
-            os.makedirs(os.path.dirname(filepath))
+            dirpath = os.path.dirname(filepath)
+            if not os.path.exists(dirpath):
+                os.makedirs(dirpath)
             open(filepath, 'wb').write(self.fileitem.file.read())
         except Exception, err:
             return None, ("Unable to write script to disk.", str(err))

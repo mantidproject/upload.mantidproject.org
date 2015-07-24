@@ -75,7 +75,27 @@ class ScriptUploadServerTest(unittest.TestCase):
 
     # ---------------- Success cases ---------------------
 
-    def test_app_returns_200_for_successful_upload(self):
+    def test_app_returns_200_for_successful_upload_in_root_folder(self):
+        extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
+        data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Added new file', path='./')
+        response = TEST_APP.post('/', extra_environ=extra_environ,
+                                 params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)], status='*')
+        expected_resp = {
+            'status': '200 OK',
+            'content-length': 85,
+            'content-type': 'application/json'
+        }
+        self.check_response(expected=expected_resp, actual=response)
+        self.check_replied_content(expected_json=dict(message='success', detail='',
+                                                      pub_date=self._now_as_str(), shell=''),
+                                   actual_str=response.body)
+        # Is the file where we expect it to be
+        repo_file = os.path.join(TEMP_GIT_REPO_PATH, "userscript.py")
+        self.assertTrue(os.path.exists(repo_file))
+        content = open(repo_file, 'r').read()
+        self.assertEquals(SCRIPT_CONTENT, content)
+
+    def test_app_returns_200_for_successful_upload_in_subfolder(self):
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Added new file', path='./muon')
         response = TEST_APP.post('/', extra_environ=extra_environ,

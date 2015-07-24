@@ -135,7 +135,8 @@ def update_central_repo(local_repo_root, script_form, err_stream):
         filepath, error = script_form.write_script_to_disk(local_repo_root)
         is_upload = True
         if error:
-            err_stream.write("Script repository upload: error writing script to disk - {0}.".format(str(error[0])))
+            detail = '\n'.join(error)
+            err_stream.write("Script repository upload: error writing script to disk - {0}.".format(detail))
             raise InternalServerError()
     else:
         # Treated as a remove request
