@@ -127,6 +127,8 @@ def update_central_repo(local_repo_root, script_form, err_stream):
     to push to the central github repository
     """
     git_repo = GitRepository(local_repo_root)
+    # Ensure we are up to date with the remote and any local changes are thrown away
+    git_repo.sync_with_remote()
     if hasattr(script_form, 'write_script_to_disk'):
         # size limit
         if script_form.filesize > MAX_FILESIZE_BYTES:

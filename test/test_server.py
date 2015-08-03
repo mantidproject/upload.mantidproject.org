@@ -145,6 +145,46 @@ class ScriptUploadServerTest(unittest.TestCase):
         # Is the file removed
         self.assertTrue(not os.path.exists(repo_file))
 
+    def test_app_returns_200_for_successful_overwrite_of_existing_file(self):
+        # Commit test file
+        repo_file = os.path.join(TEMP_GIT_REPO_PATH, "muon", "userscript.py")
+        os.mkdir(os.path.dirname(repo_file))
+        open(repo_file, 'w').write("foo")
+        start_dir = os.getcwd()
+        os.chdir(TEMP_GIT_REPO_PATH)
+        author = 'Joe Bloggs'
+        mail = 'first.last@domain.com'
+        subp.check_output('git add .; git commit -m"Added new file" --author="{0} <{1}>"; git push origin master; exit 0'.format(author, mail),
+                          stderr=subp.STDOUT, shell=True)
+        os.chdir(start_dir)
+
+        extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
+        data = dict(author=author, mail=mail, comment='Updated file', path='./muon')
+        response = TEST_APP.post('/', extra_environ=extra_environ,
+                                 params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)], status='*')
+        expected_resp = {
+            'status': '200 OK',
+            'content-length': 85,
+            'content-type': 'application/json'
+        }
+        self.check_response(expected=expected_resp, actual=response)
+        self.check_replied_content(expected_json=dict(message='success', detail='',
+                                                      pub_date=self._now_as_str(), shell=''),
+                                   actual_str=response.body)
+        # Is the file where we expect it to be. We need to flip the remote back to master to check this
+        os.chdir(TEMP_GIT_REMOTE_PATH)
+        subp.check_output('git checkout master', stderr=subp.STDOUT, shell=True)
+        os.chdir(start_dir)
+
+        repo_file = os.path.join(TEMP_GIT_REPO_PATH, "muon", "userscript.py")
+        remote_file = os.path.join(TEMP_GIT_REMOTE_PATH, "muon", "userscript.py")
+        self.assertTrue(os.path.exists(repo_file))
+        self.assertTrue(os.path.exists(remote_file))
+        repo_content = open(repo_file, 'r').read()
+        self.assertEquals(SCRIPT_CONTENT, repo_content)
+        remote_content = open(remote_file, 'r').read()
+        self.assertEquals(SCRIPT_CONTENT, remote_content)
+
     # ---------------- Failure cases ---------------------
 
     def test_app_returns_405_for_non_POST_requests(self):

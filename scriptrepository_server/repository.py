@@ -64,11 +64,13 @@ class GitRepository(object):
     """Models a git repo. Currently it needs to have been cloned first.
     """
 
-    def __init__(self, path):
+    def __init__(self, path, remote='origin', branch='master'):
         if not os.path.exists(path):
             raise ValueError('Unable to find git repository at "{0}". '\
                              'It must be have been cloned first.'.format(path))
         self.root = path
+        self.remote = remote
+        self.branch = branch
 
     def begin(self):
         """Capture the current state so that we can rollback"""
@@ -82,12 +84,6 @@ class GitRepository(object):
         being rolled back
         """
         with transaction(self):
-            remote, branch = "origin", "master"
-            # If anyone has messed around locally,
-            # make sure we are at the current origin
-            self.reset(remote + "/" + branch)
-            # Update
-            self.pull(rebase=True)
             if add_changes:
                 pub_date = self._published_date(commit.filelist[0])
                 self.add(commit.filelist)
@@ -96,7 +92,7 @@ class GitRepository(object):
                 pub_date = ''
             self.commit(commit.author, commit.email,
                         commit.committer, commit.comment)
-            self.push(remote, branch)
+            self.push(self.remote, self.branch)
 
         return pub_date
 
@@ -127,13 +123,12 @@ class GitRepository(object):
         _git('commit',[author, msg])
         del os.environ["GIT_COMMITTER_NAME"]
 
-    def _published_date(self, filepath):
-        timeformat = "%Y-%b-%d %H:%M:%S"
-        stat = os.stat(filepath)
-        modified_time = int(stat.st_mtime)
-        # The original code added 2 minutes to the modification date of the file
-        # so we preserve this behaviour here
-        return time.strftime(timeformat, time.gmtime(modified_time + 120))
+    def sync_with_remote(self):
+        """After this method call the local repository will match the remote"""
+        with dir_change(self.root):
+            self.reset(self.remote + "/" + self.branch)
+            # Update
+            self.pull(rebase=True)
 
     def pull(self, rebase=True):
         args = ["--rebase"] if rebase else []
@@ -141,6 +136,14 @@ class GitRepository(object):
 
     def push(self, remote, branch):
         _git("push", [remote, branch])
+
+    def _published_date(self, filepath):
+        timeformat = "%Y-%b-%d %H:%M:%S"
+        stat = os.stat(filepath)
+        modified_time = int(stat.st_mtime)
+        # The original code added 2 minutes to the modification date of the file
+        # so we preserve this behaviour here
+        return time.strftime(timeformat, time.gmtime(modified_time + 120))
 
 #-------------------------------------------------------------------------------
 class GitCommitInfo(object):
