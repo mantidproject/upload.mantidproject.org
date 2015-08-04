@@ -80,15 +80,16 @@ class ScriptUploadServerTest(unittest.TestCase):
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Added new file', path='./')
         response = TEST_APP.post('/', extra_environ=extra_environ,
                                  params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)], status='*')
+        self.check_replied_content(expected_json=dict(message='success', detail='',
+                                                      pub_date=self._now_as_str(), shell=''),
+                                   actual_str=response.body)
         expected_resp = {
             'status': '200 OK',
             'content-length': 85,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='success', detail='',
-                                                      pub_date=self._now_as_str(), shell=''),
-                                   actual_str=response.body)
+
         # Is the file where we expect it to be
         repo_file = os.path.join(TEMP_GIT_REPO_PATH, "userscript.py")
         self.assertTrue(os.path.exists(repo_file))
@@ -100,15 +101,16 @@ class ScriptUploadServerTest(unittest.TestCase):
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Added new file', path='./muon')
         response = TEST_APP.post('/', extra_environ=extra_environ,
                                  params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)], status='*')
+        self.check_replied_content(expected_json=dict(message='success', detail='',
+                                                      pub_date=self._now_as_str(), shell=''),
+                                   actual_str=response.body)
         expected_resp = {
             'status': '200 OK',
             'content-length': 85,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='success', detail='',
-                                                      pub_date=self._now_as_str(), shell=''),
-                                   actual_str=response.body)
+
         # Is the file where we expect it to be
         repo_file = os.path.join(TEMP_GIT_REPO_PATH, "muon", "userscript.py")
         self.assertTrue(os.path.exists(repo_file))
@@ -133,17 +135,19 @@ class ScriptUploadServerTest(unittest.TestCase):
         data = dict(author=author, mail=mail, comment='Removed file', file_n='muon/userscript.py')
         response = TEST_APP.post('/?remove=1', extra_environ=extra_environ,
                                  params=data, status='*')
+
+        self.check_replied_content(expected_json=dict(message='success', detail='',
+                                                      pub_date='', shell=''),
+                                   actual_str=response.body)
+        # Is the file removed
+        self.assertTrue(not os.path.exists(repo_file))
         expected_resp = {
             'status': '200 OK',
             'content-length': 65,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='success', detail='',
-                                                      pub_date='', shell=''),
-                                   actual_str=response.body)
-        # Is the file removed
-        self.assertTrue(not os.path.exists(repo_file))
+
 
     def test_app_returns_200_for_successful_overwrite_of_existing_file(self):
         # Commit test file
@@ -162,15 +166,16 @@ class ScriptUploadServerTest(unittest.TestCase):
         data = dict(author=author, mail=mail, comment='Updated file', path='./muon')
         response = TEST_APP.post('/', extra_environ=extra_environ,
                                  params=data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)], status='*')
+        self.check_replied_content(expected_json=dict(message='success', detail='',
+                                                      pub_date=self._now_as_str(), shell=''),
+                                   actual_str=response.body)
         expected_resp = {
             'status': '200 OK',
             'content-length': 85,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='success', detail='',
-                                                      pub_date=self._now_as_str(), shell=''),
-                                   actual_str=response.body)
+
         # Is the file where we expect it to be. We need to flip the remote back to master to check this
         os.chdir(TEMP_GIT_REMOTE_PATH)
         subp.check_output('git checkout master', stderr=subp.STDOUT, shell=True)
@@ -189,42 +194,42 @@ class ScriptUploadServerTest(unittest.TestCase):
 
     def test_app_returns_405_for_non_POST_requests(self):
         response = TEST_APP.get('/', expect_errors=True)
+        self.check_replied_content(expected_json=dict(message='Endpoint is ready to accept form uploads.', detail='',
+                                                      pub_date='', shell=''), actual_str=response.body)
         expected_resp = {
             'status': '405 Method Not Allowed',
             'content-length': 99,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='Endpoint is ready to accept form uploads.', detail='',
-                                                      pub_date='', shell=''), actual_str=response.body)
 
     def test_POST_of_form_without_all_information_produces_400_error(self):
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
         response = TEST_APP.post('/', data, expect_errors=True)
+        self.check_replied_content(expected_json=dict(message='Incomplete form information supplied.',
+                                                      detail='Missing fields: file', pub_date='', shell=''),
+                                   actual_str=response.body)
         expected_resp = {
             'status': '400 Bad Request',
             'content-length': 115,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='Incomplete form information supplied.',
-                                                      detail='Missing fields: file', pub_date='', shell=''),
-                                   actual_str=response.body)
 
     def test_POST_of_form_with_invalid_fields_produces_400_error(self):
         data = dict(author='', mail='joe.bloggs', comment='', path='')
         response = TEST_APP.post('/', data, expect_errors=True)
+        expected_content = dict(message='Incomplete form information supplied.',
+                                detail='Missing fields: file\nInvalid fields: author,mail,comment,path',
+                                pub_date='', shell='')
+        self.check_replied_content(expected_json=expected_content,
+                                   actual_str=response.body)
         expected_resp = {
             'status': '400 Bad Request',
             'content-length': 157,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        expected_content = dict(message='Incomplete form information supplied.',
-                                detail='Missing fields: file\nInvalid fields: author,mail,comment,path',
-                                pub_date='', shell='')
-        self.check_replied_content(expected_json=expected_content,
-                                   actual_str=response.body)
 
     def test_script_over_max_size_returns_400_error(self):
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
@@ -239,14 +244,14 @@ class ScriptUploadServerTest(unittest.TestCase):
         response = TEST_APP.post('/', extra_environ=extra_environ, expect_errors=True,
                                  params=data, upload_files=[("file", big_script.name)])
         os.remove(big_script.name)
+        self.check_replied_content(expected_json=dict(message='File is too large.', detail='Maximum filesize is 1048576 bytes',
+                                                      pub_date='', shell=''), actual_str=response.body)
         expected_resp = {
             'status': '400 Bad Request',
             'content-length': 109,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='File is too large.', detail='Maximum filesize is 1048576 bytes',
-                                                      pub_date='', shell=''), actual_str=response.body)
 
     def test_app_returns_400_trying_to_remove_file_by_different_author(self):
         # Commit test file
@@ -266,16 +271,16 @@ class ScriptUploadServerTest(unittest.TestCase):
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Removed file', file_n='muon/userscript.py')
         response = TEST_APP.post('/?remove=1', extra_environ=extra_environ,
                                  params=data, status='*')
+        self.check_replied_content(expected_json=dict(message='Permissions error.',
+                                                      detail='You are not allowed to remove this file as it belongs to another user',
+                                                      pub_date='', shell=''),
+                                   actual_str=response.body)
         expected_resp = {
             'status': '400 Bad Request',
             'content-length': 145,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='Permissions error.',
-                                                      detail='You are not allowed to remove this file as it belongs to another user',
-                                                      pub_date='', shell=''),
-                                   actual_str=response.body)
         # Is the file still there?
         self.assertTrue(os.path.exists(repo_file))
 
@@ -283,14 +288,14 @@ class ScriptUploadServerTest(unittest.TestCase):
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Test comment', path='./muon')
         response = TEST_APP.post('/', data, upload_files=[("file", "userscript.py", SCRIPT_CONTENT)],
                                  expect_errors=True)
+        self.check_replied_content(expected_json=dict(message='Server Error. Please contact Mantid support.', detail='',
+                                                      pub_date='', shell=''), actual_str=response.body)
         expected_resp = {
             'status': '500 Internal Server Error',
             'content-length': 102,
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
-        self.check_replied_content(expected_json=dict(message='Server Error. Please contact Mantid support.', detail='',
-                                                      pub_date='', shell=''), actual_str=response.body)
 
     # -------------------------------------------------------------------------------------------
     # Helpers
