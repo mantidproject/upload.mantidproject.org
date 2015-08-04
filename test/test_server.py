@@ -133,7 +133,7 @@ class ScriptUploadServerTest(unittest.TestCase):
         # Test remove
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
         data = dict(author=author, mail=mail, comment='Removed file', file_n='muon/userscript.py')
-        response = TEST_APP.post('/?remove=1', extra_environ=extra_environ,
+        response = TEST_APP.post('/', extra_environ=extra_environ,
                                  params=data, status='*')
 
         self.check_replied_content(expected_json=dict(message='success', detail='',
@@ -269,7 +269,7 @@ class ScriptUploadServerTest(unittest.TestCase):
         # Test remove
         extra_environ = {"SCRIPT_REPOSITORY_PATH": TEMP_GIT_REPO_PATH}
         data = dict(author='Joe Bloggs', mail='first.last@domain.com', comment='Removed file', file_n='muon/userscript.py')
-        response = TEST_APP.post('/?remove=1', extra_environ=extra_environ,
+        response = TEST_APP.post('/', extra_environ=extra_environ,
                                  params=data, status='*')
         self.check_replied_content(expected_json=dict(message='Permissions error.',
                                                       detail='You are not allowed to remove this file as it belongs to another user',
@@ -281,6 +281,7 @@ class ScriptUploadServerTest(unittest.TestCase):
             'content-type': 'application/json'
         }
         self.check_response(expected=expected_resp, actual=response)
+
         # Is the file still there?
         self.assertTrue(os.path.exists(repo_file))
 

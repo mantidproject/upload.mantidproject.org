@@ -34,7 +34,7 @@ import time
 import traceback
 from urlparse import parse_qs
 
-from .base import ScriptRemovalForm, ScriptUploadForm, ServerResponse
+from .base import ScriptFormFactory,ServerResponse
 from .errors import BadRequestException, InternalServerError, RequestException
 from .repository import GitCommitInfo, GitRepository
 
@@ -96,14 +96,9 @@ def parse_request(environ):
     """Check the request return the type to the caller
     """
     query_params = parse_qs(environ["QUERY_STRING"])
-    is_upload = ("remove" not in query_params)
     debug = ("debug" in query_params)
 
-    if is_upload:
-        cls = ScriptUploadForm
-    else:
-        cls = ScriptRemovalForm
-    script_form, error = cls.create(environ)
+    script_form, error = ScriptFormFactory.create(environ)
     if error:
         raise BadRequestException(summary=error[0], detail='\n'.join(error[1:]))
 
@@ -129,20 +124,18 @@ def update_central_repo(local_repo_root, script_form, err_stream):
     git_repo = GitRepository(local_repo_root)
     # Ensure we are up to date with the remote and any local changes are thrown away
     git_repo.sync_with_remote()
-    if hasattr(script_form, 'write_script_to_disk'):
+    if script_form.is_upload():
         # size limit
         if script_form.filesize > MAX_FILESIZE_BYTES:
             raise BadRequestException("File is too large.",
                                       "Maximum filesize is {0} bytes".format(MAX_FILESIZE_BYTES))
         filepath, error = script_form.write_script_to_disk(local_repo_root)
-        is_upload = True
         if error:
             detail = '\n'.join(error)
             err_stream.write("Script repository upload: error writing script to disk - {0}.".format(detail))
             raise InternalServerError()
     else:
         # Treated as a remove request
-        is_upload = False
         filepath = script_form.filepath(local_repo_root)
         if not git_repo.user_can_delete(filepath, script_form.author, script_form.mail):
             raise BadRequestException('Permissions error.',
@@ -153,9 +146,9 @@ def update_central_repo(local_repo_root, script_form, err_stream):
                                 comment=script_form.comment,
                                 filelist=[filepath],
                                 committer=COMMITTER_NAME,
-                                add=is_upload)
+                                add=script_form.is_upload())
     try:
-        published_date = git_repo.commit_and_push(commit_info, add_changes=is_upload)
+        published_date = git_repo.commit_and_push(commit_info, add_changes=script_form.is_upload())
     except RuntimeError:
         err_stream.write("Script repository upload: git error - {0}.".format(traceback.format_exc()))
         raise InternalServerError()

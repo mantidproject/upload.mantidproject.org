@@ -17,9 +17,7 @@ class ScriptForm(object):
     required_fields = ("author", "mail", "comment")
 
     @classmethod
-    def create(cls, environ):
-        request_fields = cgi.FieldStorage(fp=environ['wsgi.input'],
-                                          environ=environ, keep_blank_values=1)
+    def create(cls, request_fields):
         # sanity check
         data = dict()
         missing, invalid = [], []
@@ -80,6 +78,9 @@ class ScriptUploadForm(ScriptForm):
     def filesize(self):
         return len(self.fileitem.value)
 
+    def is_upload(self):
+        return True
+
     def filepath(self, root):
         # strip leading path from filename to avoid directory traversal attacks
         filename = os.path.basename(self.fileitem.filename)
@@ -107,14 +108,38 @@ class ScriptUploadForm(ScriptForm):
 # ------------------------------------------------------------------------------
 class ScriptRemovalForm(ScriptForm):
 
-    required_fields = ScriptForm.required_fields + ("file_n",)
+    extra_fields = ("file_n",)
+    required_fields = ScriptForm.required_fields + extra_fields
 
     def __init__(self, author, mail, comment, file_n):
         super(ScriptRemovalForm, self).__init__(author, mail, comment)
         self.filename = file_n
 
+    def is_upload(self):
+        return False
+
     def filepath(self, root):
         return os.path.join(root, self.filename)
+
+# ------------------------------------------------------------------------------
+class ScriptFormFactory(object):
+
+    @staticmethod
+    def create(environ):
+        """Create an appropriate scriptform for the environment
+        """
+        request_fields = cgi.FieldStorage(fp=environ['wsgi.input'],
+                                          environ=environ, keep_blank_values=1)
+        # This kind of breaks the encapsulation of ScriptRemovalForm and should
+        # probably be a chain of responsibility...
+        if ScriptRemovalForm.extra_fields[0] not in request_fields:
+            # Most of the time users upload things.
+            cls = ScriptUploadForm
+        else:
+            cls = ScriptRemovalForm
+
+        #end
+        return cls.create(request_fields)
 
 # ------------------------------------------------------------------------------
 
