@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import os
 import shutil
 import subprocess as subp
@@ -10,7 +11,7 @@ from webtest import TestApp
 
 # Our application
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from scriptrepository_server.app import application
+from scriptrepository_server.app import application, initialise_logging
 
 # Local server
 TEST_APP = None
@@ -30,6 +31,7 @@ FIRST_COMMIT = None
 # ------------------------------------------------------------------------------
 def setUpModule():
     global TEST_APP
+    initialise_logging(default_level=logging.DEBUG)
     TEST_APP = TestApp(application)
 
 def _setup_test_git_repos():
@@ -60,7 +62,6 @@ def _setup_test_git_repos():
     # Go back to where we started
     os.chdir(start_dir)
 
-# ------------------------------------------------------------------------------
 
 class ScriptUploadServerTest(unittest.TestCase):
 

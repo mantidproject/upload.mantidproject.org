@@ -5,6 +5,7 @@ from __future__ import absolute_import, print_function
 import cgi
 import httplib
 import json
+from logging import getLogger
 import os
 import re
 

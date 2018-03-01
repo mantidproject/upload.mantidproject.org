@@ -29,12 +29,17 @@ Several query parameters are understood:
 from __future__ import absolute_import, print_function
 
 import httplib
+import logging
 import traceback
 from urlparse import parse_qs
+import sys
 
 from .base import ScriptFormFactory, ServerResponse
 from .errors import BadRequestException, InternalServerError, RequestException
 from .repository import GitCommitInfo, GitRepository
+
+# Global formatting object
+_log_formatter = None
 
 # Map requests to handlers
 # Each handler should have the following structure:
@@ -54,6 +59,29 @@ MAX_FILESIZE_BYTES = 1*1024*1024
 COMMITTER_NAME = "mantid-publisher"
 
 
+def initialise_logging(default_level=logging.DEBUG):
+    global _log_formatter
+    if _log_formatter is not None:
+        return
+    _log_formatter = logging.Formatter(
+            "%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+
+    # Capture all warnings
+    logging.captureWarnings(True)
+
+    # Remove default handlers
+    root_logger = logging.getLogger()
+    root_logger.handlers = []
+
+    # Stdout handler
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setFormatter(_log_formatter)
+    root_logger.addHandler(console_handler)
+
+    # Default log level
+    root_logger.setLevel(default_level)
+
+
 # -----------------------------------------------------------------------------
 # Entry point
 # -----------------------------------------------------------------------------
@@ -63,6 +91,7 @@ def application(environ, start_response):
       :start_response A callback function that will the response to the client
     """
     # Find handler
+    logging.getLogger(__name__).info("Received request={}".format(environ['REQUEST_METHOD']))
     handle_attr = _REQUEST_HANDLERS.get(environ['REQUEST_METHOD'],
                                         'null_handler')
     response = globals()[handle_attr](environ)
@@ -78,16 +107,24 @@ def application(environ, start_response):
 # Handler methods
 # ------------------------------------------------------------------------------
 def handle_post(environ):
+    log = logging.getLogger(__name__)
+    log.info("Handling POST request")
+
     err_stream = environ["wsgi.errors"]
     try:
         script_form, debug = parse_request(environ)
+        log.debug("Request parsed:\n"
+                  "  debug={}\n"
+                  "  form={}\n".format(debug, str(script_form)))
         local_repo_root = get_local_repo_path(environ, debug, err_stream)
+        log.debug("Repository root=" + local_repo_root)
         return update_central_repo(local_repo_root, script_form, err_stream)
     except RequestException as err:
         return err.response()
 
 
 def null_handler(environ):
+    logging.getLogger(__name__).debug("Unsupported request type")
     return ServerResponse(httplib.METHOD_NOT_ALLOWED,
                           message=u'Endpoint is ready to accept form uploads.')
 
@@ -127,11 +164,15 @@ def update_central_repo(local_repo_root, script_form, err_stream):
     """This assumes that the script is running as a user who has permissions
     to push to the central github repository
     """
+    log = logging.getLogger(__name__)
+
     git_repo = GitRepository(local_repo_root)
     # Ensure we are up to date with the remote and any local
     # changes are thrown away
+    log.debug("Syncing with remote")
     git_repo.sync_with_remote()
     if script_form.is_upload():
+        log.debug("Processing script upload")
         # size limit
         if script_form.filesize > MAX_FILESIZE_BYTES:
             raise BadRequestException("File is too large.",
@@ -143,6 +184,8 @@ def update_central_repo(local_repo_root, script_form, err_stream):
             err_stream.write("Script repository upload: error writing"
                              " script to disk - {0}.".format(detail))
             raise InternalServerError()
+        log.debug("Wrote new file content to '{}'".format(filepath))
+        log.debug("New content:\n{}".format(open(filepath, 'rb').read()))
     else:
         # Treated as a remove request
         filepath = script_form.filepath(local_repo_root)
