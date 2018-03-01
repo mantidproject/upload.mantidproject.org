@@ -15,8 +15,8 @@ to the central repository using:
   - git push
 
 The response body will be a json-encoded dictionary containing:
-  - message: A string containing an information message on the outcome of the request. For
-             success it is simply 'success'
+  - message: A string containing an information message on the outcome of the
+             request. For success it is simply 'success'
   - detail: if an error occurred then further details are provided here
   - pub_date: the date and time of the upload in the format  %Y-%b-%d %H:%M:%S
 
@@ -29,12 +29,10 @@ Several query parameters are understood:
 from __future__ import absolute_import, print_function
 
 import httplib
-import os
-import time
 import traceback
 from urlparse import parse_qs
 
-from .base import ScriptFormFactory,ServerResponse
+from .base import ScriptFormFactory, ServerResponse
 from .errors import BadRequestException, InternalServerError, RequestException
 from .repository import GitCommitInfo, GitRepository
 
@@ -50,10 +48,11 @@ _REQUEST_HANDLERS = {
 }
 
 # Maximum allowed file size
-MAX_FILESIZE_BYTES=1*1024*1024
+MAX_FILESIZE_BYTES = 1*1024*1024
 
 # Comitter's name
 COMMITTER_NAME = "mantid-publisher"
+
 
 # -----------------------------------------------------------------------------
 # Entry point
@@ -69,10 +68,11 @@ def application(environ, start_response):
     response = globals()[handle_attr](environ)
     # Begin response
     start_response(response.status, response.headers)
-    # It is important to return the content within another iterable. The caller
-    # iterates over the returned iterable and sends data back with each iteration.
-    # The list makes this happen in 1 go
+    # It is important to return the content within another iterable.
+    # The caller iterates over the returned iterable and sends data back
+    # with each iteration. The list makes this happen in 1 go
     return [response.content]
+
 
 # ------------------------------------------------------------------------------
 # Handler methods
@@ -83,11 +83,14 @@ def handle_post(environ):
         script_form, debug = parse_request(environ)
         local_repo_root = get_local_repo_path(environ, debug, err_stream)
         return update_central_repo(local_repo_root, script_form, err_stream)
-    except RequestException, err:
+    except RequestException as err:
         return err.response()
 
+
 def null_handler(environ):
-    return ServerResponse(httplib.METHOD_NOT_ALLOWED, message=u'Endpoint is ready to accept form uploads.')
+    return ServerResponse(httplib.METHOD_NOT_ALLOWED,
+                          message=u'Endpoint is ready to accept form uploads.')
+
 
 # ------------------------------------------------------------------------------
 # Request checks
@@ -104,6 +107,7 @@ def parse_request(environ):
 
     return script_form, debug
 
+
 def get_local_repo_path(environ, debug, err_stream):
     envvar = 'SCRIPT_REPOSITORY_PATH'
     if debug:
@@ -111,8 +115,10 @@ def get_local_repo_path(environ, debug, err_stream):
     try:
         return environ[envvar]
     except KeyError:
-        err_stream.write("Script repository upload: Cannot find environment variable pointing to the repository")
+        err_stream.write("Script repository upload: Cannot find environment "
+                         "variable pointing to the repository")
         raise InternalServerError()
+
 
 # ------------------------------------------------------------------------------
 # Repository update
@@ -122,24 +128,29 @@ def update_central_repo(local_repo_root, script_form, err_stream):
     to push to the central github repository
     """
     git_repo = GitRepository(local_repo_root)
-    # Ensure we are up to date with the remote and any local changes are thrown away
+    # Ensure we are up to date with the remote and any local
+    # changes are thrown away
     git_repo.sync_with_remote()
     if script_form.is_upload():
         # size limit
         if script_form.filesize > MAX_FILESIZE_BYTES:
             raise BadRequestException("File is too large.",
-                                      "Maximum filesize is {0} bytes".format(MAX_FILESIZE_BYTES))
+                                      "Maximum filesize is "
+                                      "{0} bytes".format(MAX_FILESIZE_BYTES))
         filepath, error = script_form.write_script_to_disk(local_repo_root)
         if error:
             detail = '\n'.join(error)
-            err_stream.write("Script repository upload: error writing script to disk - {0}.".format(detail))
+            err_stream.write("Script repository upload: error writing"
+                             " script to disk - {0}.".format(detail))
             raise InternalServerError()
     else:
         # Treated as a remove request
         filepath = script_form.filepath(local_repo_root)
-        if not git_repo.user_can_delete(filepath, script_form.author, script_form.mail):
+        if not git_repo.user_can_delete(filepath, script_form.author,
+                                        script_form.mail):
             raise BadRequestException('Permissions error.',
-                                      'You are not allowed to remove this file as it belongs to another user')
+                                      'You are not allowed to remove this file'
+                                      ' as it belongs to another user')
 
     commit_info = GitCommitInfo(author=script_form.author,
                                 email=script_form.mail,
@@ -148,9 +159,11 @@ def update_central_repo(local_repo_root, script_form, err_stream):
                                 committer=COMMITTER_NAME,
                                 add=script_form.is_upload())
     try:
-        published_date = git_repo.commit_and_push(commit_info, add_changes=script_form.is_upload())
+        published_date = git_repo.commit_and_push(commit_info,
+                                                  add_changes=script_form.is_upload())
     except RuntimeError:
-        err_stream.write("Script repository upload: git error - {0}.".format(traceback.format_exc()))
+        err_stream.write("Script repository upload: git error "
+                         "- {0}.".format(traceback.format_exc()))
         raise InternalServerError()
 
     return ServerResponse(httplib.OK, message="success",

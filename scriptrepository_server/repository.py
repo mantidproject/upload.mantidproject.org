@@ -10,6 +10,7 @@ import os
 import subprocess as subp
 import time
 
+
 # ------------------------------------------------------------------------------
 # Helper Functions
 # ------------------------------------------------------------------------------
@@ -17,7 +18,7 @@ def _git(cmd, args):
     args.insert(0, cmd)
     return _shellcmd("git", args)
 
-#-------------------------------------------------------------------------------
+
 def _shellcmd(cmd, args=[]):
     """Use subprocess to call a given command.
     Return stdout/stderr if an error occurred
@@ -26,7 +27,7 @@ def _shellcmd(cmd, args=[]):
     cmd.extend(args)
     try:
         p = subp.Popen(cmd, stdout=subp.PIPE, stderr=subp.PIPE)
-    except ValueError, err:
+    except ValueError as err:
         raise RuntimeError(err)
     stdout, stderr = p.communicate()
     if p.returncode == 0:
@@ -34,7 +35,7 @@ def _shellcmd(cmd, args=[]):
     else:
         raise RuntimeError(stdout + stderr)
 
-#-------------------------------------------------------------------------------
+
 @contextmanager
 def transaction(git_repo):
     dir_on_enter = os.getcwd()
@@ -42,20 +43,21 @@ def transaction(git_repo):
     git_repo.begin()
     try:
         yield None
-    except Exception, exc:
+    except Exception as exc:
         git_repo.rollback()
         os.chdir(dir_on_enter)
         raise exc
     else:
         os.chdir(dir_on_enter)
 
-#-------------------------------------------------------------------------------
+
 @contextmanager
 def dir_change(newdir):
     dir_on_enter = os.getcwd()
     os.chdir(newdir)
     yield None
     os.chdir(dir_on_enter)
+
 
 # ------------------------------------------------------------------------------
 # Classes
@@ -66,7 +68,7 @@ class GitRepository(object):
 
     def __init__(self, path, remote='origin', branch='master'):
         if not os.path.exists(path):
-            raise ValueError('Unable to find git repository at "{0}". '\
+            raise ValueError('Unable to find git repository at "{0}". '
                              'It must be have been cloned first.'.format(path))
         self.root = path
         self.remote = remote
@@ -98,7 +100,7 @@ class GitRepository(object):
 
     def reset(self, sha1):
         """Performs a hard reset to the given treeish reference"""
-        return _git("reset", args=["--hard",sha1])
+        return _git("reset", args=["--hard", sha1])
 
     def add(self, filelist):
         _git("add", filelist)
@@ -115,12 +117,13 @@ class GitRepository(object):
     def commit(self, author, email, committer, msg):
         """Commits all of the changes detailed by the CommitInfo object"""
         author = '--author="{0} <{1}>"'.format(author, email)
-        # We don't need to worry about spaces as each argument is fed through separately to subprocess.Popen
+        # We don't need to worry about spaces as each argument
+        # is fed through separately to subprocess.Popen
         msg = '-m {0}'.format(msg)
 
         # Only way to reset the committer without
         os.environ['GIT_COMMITTER_NAME'] = committer
-        _git('commit',[author, msg])
+        _git('commit', [author, msg])
         del os.environ["GIT_COMMITTER_NAME"]
 
     def sync_with_remote(self):
@@ -145,11 +148,12 @@ class GitRepository(object):
         # so we preserve this behaviour here
         return time.strftime(timeformat, time.gmtime(modified_time + 120))
 
-#-------------------------------------------------------------------------------
+
 class GitCommitInfo(object):
     """Models a git commit"""
 
-    def __init__(self, author, email, comment, filelist, committer=None, add=True):
+    def __init__(self, author, email, comment, filelist,
+                 committer=None, add=True):
         self.author = author
         self.committer = committer if committer is not None else author
         self.email = email

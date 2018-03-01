@@ -1,5 +1,4 @@
 import datetime
-import httplib2
 import json
 import os
 import shutil
@@ -7,7 +6,6 @@ import subprocess as subp
 import sys
 import tempfile
 import unittest
-from urllib import urlencode
 from webtest import TestApp
 
 # Our application
@@ -244,7 +242,8 @@ class ScriptUploadServerTest(unittest.TestCase):
         response = TEST_APP.post('/', extra_environ=extra_environ, expect_errors=True,
                                  params=data, upload_files=[("file", big_script.name)])
         os.remove(big_script.name)
-        self.check_replied_content(expected_json=dict(message='File is too large.', detail='Maximum filesize is 1048576 bytes',
+        self.check_replied_content(expected_json=dict(message='File is too large.',
+                                                      detail='Maximum filesize is 1048576 bytes',
                                                       pub_date='', shell=''), actual_str=response.body)
         expected_resp = {
             'status': '400 Bad Request',

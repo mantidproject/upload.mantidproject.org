@@ -4,6 +4,7 @@ error scenarios
 import httplib
 from .base import ServerResponse
 
+
 class RequestException(Exception):
     """Generic base exception type
     """
@@ -27,10 +28,12 @@ class BadRequestException(RequestException):
         super(BadRequestException, self).__init__(summary, detail)
         self.http_error_code = httplib.BAD_REQUEST
 
+
 class InternalServerError(RequestException):
     """Indicates a 500 error - internal server problem
     """
 
     def __init__(self):
-        super(InternalServerError, self).__init__(summary='Server Error. Please contact Mantid support.', detail='')
+        super(InternalServerError,
+              self).__init__(summary='Server Error. Please contact Mantid support.', detail='')
         self.http_error_code = httplib.INTERNAL_SERVER_ERROR

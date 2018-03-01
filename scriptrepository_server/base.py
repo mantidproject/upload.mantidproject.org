@@ -11,6 +11,7 @@ import re
 # Email regex
 MAIL_RE = re.compile(r'[^@]+@[^@]+\.[^@]+')
 
+
 # ------------------------------------------------------------------------------
 class ScriptForm(object):
 
@@ -30,7 +31,7 @@ class ScriptForm(object):
                     invalid.append(name)
             else:
                 missing.append(name)
-        #endfor
+        # endfor
         if len(missing) == 0 and len(invalid) == 0:
             # Use the filtiem not the actual content
             # if we have it
@@ -61,12 +62,13 @@ class ScriptForm(object):
         self.mail = mail
         self.comment = comment
 
+
 # ------------------------------------------------------------------------------
 class ScriptUploadForm(ScriptForm):
     """Defines the incoming payload from the client and the fields that
        are expected
     """
-    required_fields = ScriptForm.required_fields  + ("path", "file")
+    required_fields = ScriptForm.required_fields + ("path", "file")
 
     def __init__(self, author, mail, comment, path, fileitem):
         super(ScriptUploadForm, self).__init__(author, mail, comment)
@@ -93,19 +95,20 @@ class ScriptUploadForm(ScriptForm):
         """
         filepath = self.filepath(root)
         if os.path.isdir(filepath):
-            return None, ("Cannot replace directory with a file.","{0} already exists as a directory.".format(filepath))
+            return None, ("Cannot replace directory with a file.",
+                          "{0} already exists as a directory.".format(filepath))
         try:
             # Make sure the directory exists
             dirpath = os.path.dirname(filepath)
             if not os.path.exists(dirpath):
                 os.makedirs(dirpath)
             open(filepath, 'wb').write(self.fileitem.file.read())
-        except Exception, err:
+        except Exception as err:
             return None, ("Unable to write script to disk.", str(err))
 
         return filepath, None
 
-# ------------------------------------------------------------------------------
+
 class ScriptRemovalForm(ScriptForm):
 
     extra_fields = ("file_n",)
@@ -121,7 +124,7 @@ class ScriptRemovalForm(ScriptForm):
     def filepath(self, root):
         return os.path.join(root, self.filename)
 
-# ------------------------------------------------------------------------------
+
 class ScriptFormFactory(object):
 
     @staticmethod
@@ -137,11 +140,10 @@ class ScriptFormFactory(object):
             cls = ScriptUploadForm
         else:
             cls = ScriptRemovalForm
+        # end
 
-        #end
         return cls.create(request_fields)
 
-# ------------------------------------------------------------------------------
 
 class ServerResponse(object):
 
@@ -165,5 +167,6 @@ class ServerResponse(object):
         detail = detail if detail is not None else ""
         pub_date = published_date if published_date is not None else ""
         shell = shell if shell is not None else ""
-        data = dict(message=message, detail=detail, pub_date=pub_date, shell=shell)
+        data = dict(message=message, detail=detail,
+                    pub_date=pub_date, shell=shell)
         self.content = json.dumps(data, encoding='utf-8')
